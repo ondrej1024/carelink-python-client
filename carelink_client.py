@@ -15,6 +15,7 @@
 #  Changelog:
 #
 #    09/05/2021 - Initial public release
+#    06/06/2021 - Add check for expired token
 #
 #  Copyright 2021, Ondrej Wisniewski 
 #
@@ -22,10 +23,11 @@
 
 import json
 import requests
+from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
 
 # Version string
-VERSION = "0.1"
+VERSION = "0.2"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -336,10 +338,10 @@ class CareLinkClient(object):
       # New token is needed:
       # a) no token or about to expire => execute authentication
       # b) last response 401
-      if auth_token == None or auth_token_validto == None or self.__lastResponseCode in [401,403]:
-         # TODO: add check for expired token
+      if auth_token == None or auth_token_validto == None or \
+         (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=300) or \
+         self.__lastResponseCode in [401,403]:
          # execute new login process | null, if error OR already doing login
-         #if loginInProcess or not executeLoginProcedure():
          if self.__loginInProcess:
             printdbg("loginInProcess")
             return None
