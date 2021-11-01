@@ -50,9 +50,9 @@ class CareLinkClient(object):
    def __init__(self, carelinkUsername, carelinkPassword, carelinkCountry):
       
       # User info
-      self.__carelinkUsername = carelinkUsername;
-      self.__carelinkPassword = carelinkPassword;
-      self.__carelinkCountry = carelinkCountry;
+      self.__carelinkUsername = carelinkUsername
+      self.__carelinkPassword = carelinkPassword
+      self.__carelinkCountry = carelinkCountry.lower()
 
       # Session info
       self.__sessionUser = None

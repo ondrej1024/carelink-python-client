@@ -19,6 +19,7 @@
 #  Changelog:
 #
 #    08/06/2021 - Initial public release
+#    27/07/2021 - Add logging, bug fixes
 #
 #  Copyright 2021, Ondrej Wisniewski 
 #
@@ -31,15 +32,21 @@ import json
 import sys
 import signal
 import threading 
+import syslog
+import logging as log
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.1"
+VERSION = "0.2"
+
+# Logging config
+FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
+log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
 
 # HTTP server settings
 HOSTNAME = "0.0.0.0"
-PORT     = 8080
+PORT     = 8081
 BASEURI  = "carelink/"
 
 recentData = None
@@ -47,32 +54,33 @@ verbose = False
 
 
 #################################################
-# Print verbose
-#################################################
-def printvbs(msg):
-   if verbose:
-      print(msg)
-
-
-#################################################
 # The signal handler for the TERM signal
 #################################################
 def on_sigterm(signum, frame):
    # TODO: cleanup (if any)
-   printvbs("exiting")
+   log.debug("exiting")
+   syslog.syslog(syslog.LOG_NOTICE, "Exiting")
    sys.exit()
 
 
 def get_essential_data(data):
    mydata = data
-   if "sgs" in mydata:
+   try:
       del mydata["sgs"]
-   if "markers" in mydata:
+   except KeyError,TypeError:
+      pass
+   try:
       del mydata["markers"]
-   if "limits" in mydata:
+   except KeyError,TypeError:
+      pass
+   try:
       del mydata["limits"]
-   if "notificationHistory" in mydata:
+   except KeyError,TypeError:
+      pass
+   try:
       del mydata["notificationHistory"]
+   except KeyError,TypeError:
+      pass
    
    return mydata
 
@@ -89,7 +97,7 @@ class MyServer(BaseHTTPRequestHandler):
    def do_GET(self):
       # Security checks (if any)
       # TODO
-      printvbs("received client request from %s" % (self.address_string()))
+      log.debug("received client request from %s" % (self.address_string()))
       
       # Check request path
       if self.path.strip("/") == BASEURI+"alldata":
@@ -121,7 +129,7 @@ class MyServer(BaseHTTPRequestHandler):
 def webserver_thread():
    # Init web server
    webserver = HTTPServer((HOSTNAME, PORT), MyServer)
-   printvbs("HTTP server started at http://%s:%s" % (HOSTNAME, PORT))
+   log.debug("HTTP server started at http://%s:%s" % (HOSTNAME, PORT))
    #syslog.syslog(syslog.LOG_NOTICE, "HTTP server started at http://"+HOSTNAME+":"+str(PORT))
 
    # Start server loop
@@ -153,6 +161,17 @@ country  = args.country
 wait     = 5 if args.wait == None else args.wait
 verbose  = args.verbose
 
+# Logging config (verbose)
+if verbose:
+   FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
+   log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
+else:
+   log.disable(level=log.DEBUG)
+
+# Init syslog
+syslog.openlog("carelink_client_proxy", syslog.LOG_PID|syslog.LOG_CONS, syslog.LOG_USER)
+syslog.syslog(syslog.LOG_NOTICE, "Starting Carelink Client Proxy (version "+VERSION+")")
+
 # Init signal handler
 signal.signal(signal.SIGTERM, on_sigterm)
 signal.signal(signal.SIGINT, on_sigterm)
@@ -162,7 +181,7 @@ start_webserver()
 
 # Create Carelink client
 client = carelink_client.CareLinkClient(username, password, country)
-printvbs("Client created!")
+log.debug("Client created!")
 
 # First login to Carelink server
 if client.login():
@@ -170,7 +189,7 @@ if client.login():
    i = 0
    while True:
       i += 1
-      printvbs("Starting download " + str(i))
+      log.debug("Starting download " + str(i))
       try:
          for j in range(2):
             recentData = client.getRecentData()
@@ -178,7 +197,7 @@ if client.login():
             if client.getLastResponseCode() == HTTPStatus.OK:
                # Data OK
                if client.getLastDataSuccess():
-                  printvbs("New data received")
+                  log.debug("New data received")
                # Data error
                else:
                   print("Data exception: " + "no details available" if client.getLastErrorMessage() == None else client.getLastErrorMessage())
@@ -192,8 +211,11 @@ if client.login():
                time.sleep(1)
       except Exception as e:
          print(e)
+         syslog.syslog(syslog.LOG_ERR, e)
             
-      printvbs("Waiting " + str(wait) + " minutes before next download!")
+      log.debug("Waiting " + str(wait) + " minutes before next download!")
       time.sleep(wait * 60)
 else:
    print("Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
+   syslog.syslog(syslog.LOG_ERR,"Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
+   syslog.syslog(syslog.LOG_ERR, "Emergency exit")
