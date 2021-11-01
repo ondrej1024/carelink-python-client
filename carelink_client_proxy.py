@@ -67,19 +67,19 @@ def get_essential_data(data):
    mydata = data
    try:
       del mydata["sgs"]
-   except KeyError,TypeError:
+   except (KeyError,TypeError) as e:
       pass
    try:
       del mydata["markers"]
-   except KeyError,TypeError:
+   except (KeyError,TypeError) as e:
       pass
    try:
       del mydata["limits"]
-   except KeyError,TypeError:
+   except (KeyError,TypeError) as e:
       pass
    try:
       del mydata["notificationHistory"]
-   except KeyError,TypeError:
+   except (KeyError,TypeError) as e:
       pass
    
    return mydata

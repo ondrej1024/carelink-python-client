@@ -87,3 +87,19 @@ The last open question was just how it works outside the US, because  the online
 #### Java
 
 https://github.com/benceszasz/CareLinkJavaClient
+
+
+
+### Data fields
+
+| Field                                     | Value                                                        |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| timeToNextCalibHours                      | 0,1,...,12                                                   |
+| timeToNextCalibrationMinutes              | 0,1,2,...                                                    |
+| sensorState                               | "CALIBRATION_REQUIRED", "SG_BELOW_40_MGDL","DO_NOT_CALIBRATE","CHANGE_SENSOR",WARM_UP","NO_ERROR_MESSAGE" |
+| calibStatus                               | "DUENOW", "LESS_THAN_TWELVE_HRS"                             |
+| lastSGTrend                               | "NONE","UP","DOUBLE_UP",...                                  |
+| bgUnits                                   | "MGDL", "MMOL"?                                              |
+| therapyAlgorithmState/autoModeShieldState | "FEATURE_OFF","AUTO_BASAL","SAFE_BASAL" (when waiting for calibration) |
+| therapyAlgorithmState/safeBasalDuration   | minutes to exit from auto                                    |
+
