@@ -211,7 +211,7 @@ if client.login():
                time.sleep(1)
       except Exception as e:
          print(e)
-         syslog.syslog(syslog.LOG_ERR, e)
+         syslog.syslog(syslog.LOG_ERR, "ERROR: %s" % (str(e)))
             
       log.debug("Waiting " + str(wait) + " minutes before next download!")
       time.sleep(wait * 60)
