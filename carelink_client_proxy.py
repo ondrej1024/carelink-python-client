@@ -9,8 +9,8 @@
 #    REST API to local clients:
 #
 #    Send a GET request to the following URI: 
-#      http://<serveraddr>:8080/carelink/alldata   # all Carelink data
-#      http://<serveraddr>:8080/carelink/nohistory # no history data
+#      http://<serveraddr>:8081/carelink/alldata   # all Carelink data
+#      http://<serveraddr>:8081/carelink/nohistory # no history data
 #  
 #  Author:
 #
@@ -20,8 +20,9 @@
 #
 #    08/06/2021 - Initial public release
 #    27/07/2021 - Add logging, bug fixes
+#    06/02/2022 - Download new data as soon as it is available
 #
-#  Copyright 2021, Ondrej Wisniewski 
+#  Copyright 2021-2022, Ondrej Wisniewski 
 #
 ###############################################################################
 
@@ -38,7 +39,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.2"
+VERSION = "0.3"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -48,6 +49,9 @@ log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
 HOSTNAME = "0.0.0.0"
 PORT     = 8081
 BASEURI  = "carelink/"
+
+UPDATE_INTERVAL = 300
+RETRY_INTERVAL  = 120
 
 recentData = None
 verbose = False
@@ -150,7 +154,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--username', '-u', type=str, help='CareLink username', required=True)
 parser.add_argument('--password', '-p', type=str, help='CareLink password', required=True)
 parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=True)
-parser.add_argument('--wait',     '-w', type=int, help='Wait minutes between repeated calls (default 5min)', required=False)
+parser.add_argument('--wait',     '-w', type=int, help='Wait seconds between repeated calls (default 300)', required=False)
 parser.add_argument('--verbose',  '-v', help='Verbose mode', action='store_true')
 args = parser.parse_args()
 
@@ -158,7 +162,7 @@ args = parser.parse_args()
 username = args.username
 password = args.password
 country  = args.country
-wait     = 5 if args.wait == None else args.wait
+wait     = UPDATE_INTERVAL if args.wait == None else args.wait
 verbose  = args.verbose
 
 # Logging config (verbose)
@@ -212,9 +216,20 @@ if client.login():
       except Exception as e:
          print(e)
          syslog.syslog(syslog.LOG_ERR, "ERROR: %s" % (str(e)))
-            
-      log.debug("Waiting " + str(wait) + " minutes before next download!")
-      time.sleep(wait * 60)
+      
+      # Calculate time until next reading
+      if recentData != None:
+         nextReading = int(recentData["lastConduitUpdateServerTime"]/1000) + wait
+         tmoSeconds  = int(nextReading - time.time())
+         print("Next reading at {0}, {1} seconds from now\n".format(nextReading,tmoSeconds))
+         if tmoSeconds < 0:
+            tmoSeconds = RETRY_INTERVAL
+      else:
+         tmoSeconds = RETRY_INTERVAL
+         print("Retry reading {0} seconds from now\n".format(tmoSeconds))
+
+      log.debug("Waiting " + str(tmoSeconds) + " seconds before next download!")
+      time.sleep(tmoSeconds+10)
 else:
    print("Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
    syslog.syslog(syslog.LOG_ERR,"Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
