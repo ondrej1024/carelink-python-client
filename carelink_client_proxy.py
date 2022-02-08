@@ -9,7 +9,7 @@
 #    REST API to local clients:
 #
 #    Send a GET request to the following URI: 
-#      http://<serveraddr>:8081/carelink/alldata   # all Carelink data
+#      http://<serveraddr>:8081/carelink/          # all Carelink data
 #      http://<serveraddr>:8081/carelink/nohistory # no history data
 #  
 #  Author:
@@ -21,6 +21,7 @@
 #    08/06/2021 - Initial public release
 #    27/07/2021 - Add logging, bug fixes
 #    06/02/2022 - Download new data as soon as it is available
+#    08/02/2022 - Fix HTTP API
 #
 #  Copyright 2021-2022, Ondrej Wisniewski 
 #
@@ -39,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.3"
+VERSION = "0.4"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -48,7 +49,8 @@ log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
 # HTTP server settings
 HOSTNAME = "0.0.0.0"
 PORT     = 8081
-BASEURI  = "carelink/"
+BASEURI  = "carelink"
+OPT_NOHISTORY = "nohistory"
 
 UPDATE_INTERVAL = 300
 RETRY_INTERVAL  = 120
@@ -68,24 +70,25 @@ def on_sigterm(signum, frame):
 
 
 def get_essential_data(data):
-   mydata = data
-   try:
-      del mydata["sgs"]
-   except (KeyError,TypeError) as e:
-      pass
-   try:
-      del mydata["markers"]
-   except (KeyError,TypeError) as e:
-      pass
-   try:
-      del mydata["limits"]
-   except (KeyError,TypeError) as e:
-      pass
-   try:
-      del mydata["notificationHistory"]
-   except (KeyError,TypeError) as e:
-      pass
-   
+   mydata = ""
+   if data != None:      
+      mydata = data.copy()
+      try:
+         del mydata["sgs"]
+      except (KeyError,TypeError) as e:
+         pass
+      try:
+         del mydata["markers"]
+      except (KeyError,TypeError) as e:
+         pass
+      try:
+         del mydata["limits"]
+      except (KeyError,TypeError) as e:
+         pass
+      try:
+         del mydata["notificationHistory"]
+      except (KeyError,TypeError) as e:
+         pass
    return mydata
 
 
@@ -104,14 +107,16 @@ class MyServer(BaseHTTPRequestHandler):
       log.debug("received client request from %s" % (self.address_string()))
       
       # Check request path
-      if self.path.strip("/") == BASEURI+"alldata":
+      if self.path.strip("/") == BASEURI:
          # Get latest Carelink data (complete)
          response = json.dumps(recentData)
          status_code = HTTPStatus.OK
-      elif self.path.strip("/") == BASEURI+"nohistory":
+         #print("All data requested")
+      elif self.path.strip("/") == BASEURI+'/'+OPT_NOHISTORY:
          # Get latest Carelink data without history
          response = json.dumps(get_essential_data(recentData))
          status_code = HTTPStatus.OK
+         #print("Only essential data requested")
       else:
          response = ""
          status_code = HTTPStatus.NOT_FOUND
@@ -221,12 +226,12 @@ if client.login():
       if recentData != None:
          nextReading = int(recentData["lastConduitUpdateServerTime"]/1000) + wait
          tmoSeconds  = int(nextReading - time.time())
-         print("Next reading at {0}, {1} seconds from now\n".format(nextReading,tmoSeconds))
+         #print("Next reading at {0}, {1} seconds from now\n".format(nextReading,tmoSeconds))
          if tmoSeconds < 0:
             tmoSeconds = RETRY_INTERVAL
       else:
          tmoSeconds = RETRY_INTERVAL
-         print("Retry reading {0} seconds from now\n".format(tmoSeconds))
+         #print("Retry reading {0} seconds from now\n".format(tmoSeconds))
 
       log.debug("Waiting " + str(tmoSeconds) + " seconds before next download!")
       time.sleep(tmoSeconds+10)
