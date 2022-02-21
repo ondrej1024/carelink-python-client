@@ -36,11 +36,11 @@ import signal
 import threading 
 import syslog
 import logging as log
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.4"
+VERSION = "0.5"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -98,7 +98,7 @@ def get_essential_data(data):
 class MyServer(BaseHTTPRequestHandler):
    
    def log_message(self, format, *args):
-      # Disable logging
+      #Disable logging
       pass
 
    def do_GET(self):
@@ -137,7 +137,7 @@ class MyServer(BaseHTTPRequestHandler):
 #################################################
 def webserver_thread():
    # Init web server
-   webserver = HTTPServer((HOSTNAME, PORT), MyServer)
+   webserver = ThreadingHTTPServer((HOSTNAME, PORT), MyServer)
    log.debug("HTTP server started at http://%s:%s" % (HOSTNAME, PORT))
    #syslog.syslog(syslog.LOG_NOTICE, "HTTP server started at http://"+HOSTNAME+":"+str(PORT))
 
