@@ -34,13 +34,13 @@ import json
 import sys
 import signal
 import threading 
-import syslog
+#import syslog
 import logging as log
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.5"
+VERSION = "0.5.1"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -65,7 +65,7 @@ verbose = False
 def on_sigterm(signum, frame):
    # TODO: cleanup (if any)
    log.debug("exiting")
-   syslog.syslog(syslog.LOG_NOTICE, "Exiting")
+   #syslog.syslog(syslog.LOG_NOTICE, "Exiting")
    sys.exit()
 
 
@@ -139,7 +139,7 @@ def webserver_thread():
    # Init web server
    webserver = ThreadingHTTPServer((HOSTNAME, PORT), MyServer)
    log.debug("HTTP server started at http://%s:%s" % (HOSTNAME, PORT))
-   #syslog.syslog(syslog.LOG_NOTICE, "HTTP server started at http://"+HOSTNAME+":"+str(PORT))
+   ##syslog.syslog(syslog.LOG_NOTICE, "HTTP server started at http://"+HOSTNAME+":"+str(PORT))
 
    # Start server loop
    webserver.serve_forever()
@@ -178,8 +178,8 @@ else:
    log.disable(level=log.DEBUG)
 
 # Init syslog
-syslog.openlog("carelink_client_proxy", syslog.LOG_PID|syslog.LOG_CONS, syslog.LOG_USER)
-syslog.syslog(syslog.LOG_NOTICE, "Starting Carelink Client Proxy (version "+VERSION+")")
+#syslog.openlog("carelink_client_proxy", syslog.LOG_PID|syslog.LOG_CONS, syslog.LOG_USER)
+#syslog.syslog(syslog.LOG_NOTICE, "Starting Carelink Client Proxy (version "+VERSION+")")
 
 # Init signal handler
 signal.signal(signal.SIGTERM, on_sigterm)
@@ -220,7 +220,7 @@ if client.login():
                time.sleep(1)
       except Exception as e:
          print(e)
-         syslog.syslog(syslog.LOG_ERR, "ERROR: %s" % (str(e)))
+         #syslog.syslog(syslog.LOG_ERR, "ERROR: %s" % (str(e)))
       
       # Calculate time until next reading
       if recentData != None:
@@ -237,5 +237,5 @@ if client.login():
       time.sleep(tmoSeconds+10)
 else:
    print("Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
-   syslog.syslog(syslog.LOG_ERR,"Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
-   syslog.syslog(syslog.LOG_ERR, "Emergency exit")
+   #syslog.syslog(syslog.LOG_ERR,"Client login error! Response code: " + str(client.getLastResponseCode()) + " Error message: " + str(client.getLastErrorMessage()))
+   #syslog.syslog(syslog.LOG_ERR, "Emergency exit")
