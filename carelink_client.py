@@ -16,8 +16,9 @@
 #
 #    09/05/2021 - Initial public release
 #    06/06/2021 - Add check for expired token
+#    19/09/2022 - Check for general BLE device family to support 770G
 #
-#  Copyright 2021, Ondrej Wisniewski 
+#  Copyright 2021-2022, Ondrej Wisniewski 
 #
 ###############################################################################
 
@@ -27,7 +28,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
 
 # Version string
-VERSION = "0.2"
+VERSION = "0.3"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -358,7 +359,7 @@ class CareLinkClient(object):
    def getRecentData(self):
       # Force login to get basic info
       if self.__getAuthorizationToken() != None:
-         if self.__carelinkCountry == "us" or self.__sessionMonitorData["deviceFamily"] == "BLE_X":
+         if self.__carelinkCountry == "us" or "BLE" in self.__sessionMonitorData["deviceFamily"]:
             role = "carepartner" if self.__sessionUser["role"] in ["CARE_PARTNER","CARE_PARTNER_OUS"] else "patient"
             return self.__getConnectDisplayMessage(self.__sessionProfile["username"], role, self.__sessionCountrySettings["blePereodicDataEndpoint"])
          else:
