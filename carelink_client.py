@@ -17,8 +17,9 @@
 #    09/05/2021 - Initial public release
 #    06/06/2021 - Add check for expired token
 #    19/09/2022 - Check for general BLE device family to support 770G
+#    09/05/2023 - Fix connection issues by removing common http headers
 #
-#  Copyright 2021-2022, Ondrej Wisniewski 
+#  Copyright 2021-2023, Ondrej Wisniewski 
 #
 ###############################################################################
 
@@ -28,7 +29,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
 
 # Version string
-VERSION = "0.3"
+VERSION = "0.4"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -68,6 +69,8 @@ class CareLinkClient(object):
       self.__lastResponseCode = None
       self.__lastErrorMessage = None
 
+      self.__commonHeaders = {}
+      '''
       self.__commonHeaders = {
             # Common browser headers
             "Accept-Language":"en;q=0.9, *;q=0.8",
@@ -76,7 +79,7 @@ class CareLinkClient(object):
             "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36",
             "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
           }
-      
+      '''
       # Create main http client session with CookieJar
       self.__httpClient = requests.Session()
     
