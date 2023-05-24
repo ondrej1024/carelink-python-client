@@ -22,8 +22,9 @@
 #    27/07/2021 - Add logging, bug fixes
 #    06/02/2022 - Download new data as soon as it is available
 #    08/02/2022 - Fix HTTP API
+#    24/05/2023 - Add patient parameter
 #
-#  Copyright 2021-2022, Ondrej Wisniewski 
+#  Copyright 2021-2023, Ondrej Wisniewski 
 #
 ###############################################################################
 
@@ -40,7 +41,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.5"
+VERSION = "0.6"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -159,6 +160,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--username', '-u', type=str, help='CareLink username', required=True)
 parser.add_argument('--password', '-p', type=str, help='CareLink password', required=True)
 parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=True)
+parser.add_argument('--patient',  '-a', type=str, help='CareLink patient', required=True)
 parser.add_argument('--wait',     '-w', type=int, help='Wait seconds between repeated calls (default 300)', required=False)
 parser.add_argument('--verbose',  '-v', help='Verbose mode', action='store_true')
 args = parser.parse_args()
@@ -167,6 +169,7 @@ args = parser.parse_args()
 username = args.username
 password = args.password
 country  = args.country
+patient  = args.patient
 wait     = UPDATE_INTERVAL if args.wait == None else args.wait
 verbose  = args.verbose
 
@@ -189,7 +192,7 @@ signal.signal(signal.SIGINT, on_sigterm)
 start_webserver()
 
 # Create Carelink client
-client = carelink_client.CareLinkClient(username, password, country)
+client = carelink_client.CareLinkClient(username, password, country, patient)
 log.debug("Client created!")
 
 # First login to Carelink server

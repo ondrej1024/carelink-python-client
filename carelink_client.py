@@ -18,6 +18,7 @@
 #    06/06/2021 - Add check for expired token
 #    19/09/2022 - Check for general BLE device family to support 770G
 #    09/05/2023 - Fix connection issues by removing common http headers
+#    24/05/2023 - Add handling of patient Id in data request
 #
 #  Copyright 2021-2023, Ondrej Wisniewski 
 #
@@ -29,7 +30,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
 
 # Version string
-VERSION = "0.4"
+VERSION = "0.5"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -49,12 +50,13 @@ def printdbg(msg):
 
 class CareLinkClient(object):
    
-   def __init__(self, carelinkUsername, carelinkPassword, carelinkCountry):
+   def __init__(self, carelinkUsername, carelinkPassword, carelinkCountry, carelinkPatient):
       
       # User info
       self.__carelinkUsername = carelinkUsername
       self.__carelinkPassword = carelinkPassword
       self.__carelinkCountry = carelinkCountry.lower()
+      self.__carelinkPatient = carelinkPatient
 
       # Session info
       self.__sessionUser = None
@@ -259,12 +261,13 @@ class CareLinkClient(object):
 
 
    # Periodic data from CareLink Cloud
-   def __getConnectDisplayMessage(self, username, role, endpointUrl):
+   def __getConnectDisplayMessage(self, username, role, patient, endpointUrl):
       printdbg("__getConnectDisplayMessage()")
    
       # Build user json for request
       userJson = { "username":username,
-                   "role":role
+                   "role":role,
+                   "patientId":patient
                  }
       requestBody = json.dumps(userJson)
       recentData = self.__getData(None, endpointUrl, None, requestBody)
@@ -364,7 +367,8 @@ class CareLinkClient(object):
       if self.__getAuthorizationToken() != None:
          if self.__carelinkCountry == "us" or "BLE" in self.__sessionMonitorData["deviceFamily"]:
             role = "carepartner" if self.__sessionUser["role"] in ["CARE_PARTNER","CARE_PARTNER_OUS"] else "patient"
-            return self.__getConnectDisplayMessage(self.__sessionProfile["username"], role, self.__sessionCountrySettings["blePereodicDataEndpoint"])
+            patient = self.__carelinkPatient
+            return self.__getConnectDisplayMessage(self.__sessionProfile["username"], role, patient, self.__sessionCountrySettings["blePereodicDataEndpoint"])
          else:
             return self.__getLast24Hours()
       else:

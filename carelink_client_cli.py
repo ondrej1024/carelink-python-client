@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--username', '-u', type=str, help='CareLink username', required=True)
 parser.add_argument('--password', '-p', type=str, help='CareLink password', required=True)
 parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=True)
+parser.add_argument('--patient',  '-a', type=str, help='CareLink patient', required=True)
 parser.add_argument('--repeat',   '-r', type=int, help='Repeat request times', required=False)
 parser.add_argument('--wait',     '-w', type=int, help='Wait minutes between repeated calls', required=False)
 parser.add_argument('--data',     '-d', help='Save recent data', action='store_true')
@@ -33,6 +34,7 @@ args = parser.parse_args()
 username = args.username
 password = args.password
 country  = args.country
+patient  = args.patient
 repeat   = 1 if args.repeat == None else args.repeat
 wait     = 5 if args.wait == None else args.wait
 data     = args.data
@@ -47,7 +49,7 @@ verbose  = args.verbose
 #print("verbose  = " + str(verbose))
 
 
-client = carelink_client.CareLinkClient(username, password, country)
+client = carelink_client.CareLinkClient(username, password, country, patient)
 if verbose:
    print("Client created!")
    
