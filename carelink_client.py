@@ -125,7 +125,7 @@ class CareLinkClient(object):
 
    def __doLogin(self, loginSessionResponse):
       queryParameters = dict(parse_qsl(urlparse(loginSessionResponse.url).query))
-      url = "https://mdtlogin.medtronic.com" + "/mmcl/auth/oauth/v2/authorize/login"
+      url = "https://mdtlogin-ocl.medtronic.com" + "/mmcl/auth/oauth/v2/authorize/login"
       payload = { "country":self.__carelinkCountry, 
                   "locale":CARELINK_LOCALE_EN
                 }
