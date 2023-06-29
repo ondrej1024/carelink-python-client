@@ -19,6 +19,7 @@
 #    19/09/2022 - Check for general BLE device family to support 770G
 #    09/05/2023 - Fix connection issues by removing common http headers
 #    24/05/2023 - Add handling of patient Id in data request
+#    29/06/2023 - Get login parameters from response to connection request
 #
 #  Copyright 2021-2023, Ondrej Wisniewski 
 #
@@ -30,7 +31,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
 
 # Version string
-VERSION = "0.5"
+VERSION = "0.6"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -127,13 +128,14 @@ class CareLinkClient(object):
 
    def __doLogin(self, loginSessionResponse):
       queryParameters = dict(parse_qsl(urlparse(loginSessionResponse.url).query))
-      url = "https://mdtlogin.medtronic.com" + "/mmcl/auth/oauth/v2/authorize/login"
-      payload = { "country":self.__carelinkCountry, 
-                  "locale":CARELINK_LOCALE_EN
+      p = urlparse(loginSessionResponse.url)
+      url = p.scheme + "://" + p.netloc + p.path
+      payload = { "country":queryParameters["countrycode"], 
+                  "locale":queryParameters["locale"]
                 }
       form =    { "sessionID":queryParameters["sessionID"],
                   "sessionData":queryParameters["sessionData"],
-                  "locale":CARELINK_LOCALE_EN,
+                  "locale":queryParameters["locale"],
                   "action":"login",
                   "username":self.__carelinkUsername,
                   "password":self.__carelinkPassword,
