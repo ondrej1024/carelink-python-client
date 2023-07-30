@@ -70,7 +70,7 @@ cd carelink-python-client
 
     import carelink_client
     
-    client = carelink_client.CareLinkClient("carelink_username", "carelink_password", "carelink_country_code")
+    client = carelink_client.CareLinkClient("carelink_username", "carelink_password", "carelink_country_code", "patient_id")
     if client.login():
         recentData = client.getRecentData()
 
