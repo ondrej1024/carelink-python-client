@@ -29,6 +29,7 @@ import json
 import requests
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
+import time
 
 # Version string
 VERSION = "0.6"
