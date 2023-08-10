@@ -76,7 +76,7 @@ cd carelink-python-client
 
 ### Download last 24 hours using CLI
 
-    python carelink_client_cli.py -u carelink_username -p carelink_password -c carelink_country_code -d
+    python carelink_client_cli.py -u carelink_username -p carelink_password -c carelink_country_code -a patient_id -d
 
 ### Get CLI options
 
