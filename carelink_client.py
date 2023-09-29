@@ -20,6 +20,7 @@
 #    09/05/2023 - Fix connection issues by removing common http headers
 #    24/05/2023 - Add handling of patient Id in data request
 #    29/06/2023 - Get login parameters from response to connection request
+#    29/09/2023 - Add recaptcha workaround
 #
 #  Copyright 2021-2023, Ondrej Wisniewski 
 #
@@ -32,7 +33,7 @@ from urllib.parse import urlparse, parse_qsl
 import time
 
 # Version string
-VERSION = "0.6"
+VERSION = "0.7"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -118,6 +119,7 @@ class CareLinkClient(object):
          response = self.__httpClient.get(url, headers = self.__commonHeaders, params = payload)
          if not response.ok:
             raise ValueError("session response is not OK")
+         #print(response.url)  # DEBUG
       except Exception as e:
          printdbg(e)
          printdbg("__getLoginSession() failed")
@@ -140,6 +142,7 @@ class CareLinkClient(object):
                   "action":"login",
                   "username":self.__carelinkUsername,
                   "password":self.__carelinkPassword,
+                  "g-recaptcha-response":"abc", # FIXME
                   "actionButton":"Log in"
                 }
       try:
