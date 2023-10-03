@@ -21,6 +21,7 @@
 #    24/05/2023 - Add handling of patient Id in data request
 #    29/06/2023 - Get login parameters from response to connection request
 #    29/09/2023 - Add recaptcha workaround
+#    02/10/2023 - Add refresh of auth token
 #
 #  Copyright 2021-2023, Ondrej Wisniewski 
 #
@@ -28,12 +29,13 @@
 
 import json
 import requests
+import time
+import logging as log
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
-import time
 
 # Version string
-VERSION = "0.7"
+VERSION = "0.8"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -43,6 +45,10 @@ CARELINK_LOCALE_EN = "en"
 CARELINK_AUTH_TOKEN_COOKIE_NAME = "auth_tmp_token"
 CARELINK_TOKEN_VALIDTO_COOKIE_NAME = "c_token_valid_to"
 AUTH_EXPIRE_DEADLINE_MINUTES = 1
+
+# Logging config
+FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
+log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.INFO)
 
 DEBUG = False
 
@@ -292,6 +298,8 @@ class CareLinkClient(object):
       lastLoginSuccess = False
       self.__loginInProcess = True
       self.__lastErrorMessage = None
+      
+      log.info("Performing login")
 
       try:
          # Clear cookies
@@ -333,15 +341,48 @@ class CareLinkClient(object):
          # Set login success if everything was ok:
          if self.__sessionUser != None and self.__sessionProfile != None and self.__sessionCountrySettings != None and self.__sessionMonitorData != None:
             lastLoginSuccess = True
+            log.info("Login successful")
          
       except Exception as e:
          printdbg(e)
          self.__lastErrorMessage = e
+         log.info("Login failed with exception")
 
       self.__loginInProcess = False
       self.__loggedIn = lastLoginSuccess
 
       return lastLoginSuccess
+
+
+   def __refreshToken(self, token):
+      printdbg("__refreshToken()")
+      log.info("Trying to refresh token")
+      
+      if token == None:
+         printdbg("__refreshToken() no token to refresh")
+         log.info("No token to refresh")
+         return False
+      
+      success = True
+      url = "https://" + self.__careLinkServer() + "/patient/sso/reauth"
+      headers = self.__commonHeaders
+      headers["Accept"] = "application/json, text/plain, */*"
+      headers["Authorization"] = "Bearer " + token
+      try:
+         response = self.__httpClient.post(url, headers = headers, data = 0)
+         self.__lastResponseCode = response.status_code
+         if response.ok:
+            printdbg("__refreshToken() success")
+            log.info("Token successfully refreshed")
+         else:
+            printdbg(response.status_code)
+            raise ValueError("session post response is not OK")            
+      except Exception as e:
+         printdbg(e)
+         printdbg("__refreshToken() failed")
+         log.info("Failed to refresh token")
+         success = False
+      return success
 
 
    def __getAuthorizationToken(self):
@@ -352,16 +393,22 @@ class CareLinkClient(object):
       # a) no token or about to expire => execute authentication
       # b) last response 401
       if auth_token == None or auth_token_validto == None or \
-         (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=300) or \
-         self.__lastResponseCode in [401,403]:
-         # execute new login process | null, if error OR already doing login
-         if self.__loginInProcess:
-            printdbg("loginInProcess")
-            return None
-         if not self.__executeLoginProcedure():
-            printdbg("__executeLoginProcedure failed")
-            return None
+         self.__lastResponseCode in [401,403] or \
+         (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=10*60):
+         
+         printdbg("now: %s" % datetime.utcnow())
+         # Try to refresh token
+         if not self.__refreshToken(auth_token):
+            # Refresh failed, execute new login process
+            if self.__loginInProcess:
+               printdbg("loginInProcess")
+               return None
+            if not self.__executeLoginProcedure():
+               printdbg("__executeLoginProcedure failed")
+               return None
+         #printdbg("auth_token\n%s\n" % self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME))
          printdbg("auth_token_validto = " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
+         log.info("New token is valid until " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
 
       # there can be only one
       return "Bearer " + self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME)
@@ -385,5 +432,9 @@ class CareLinkClient(object):
    def login(self):
       if not self.__loggedIn:
          self.__executeLoginProcedure()
+         printdbg("now: %s" % datetime.utcnow())
+         #printdbg("auth_token\n%s\n" % self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME))
+         printdbg("auth_token_validto = " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
+         log.info("New token is valid until " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
       return self.__loggedIn
 
