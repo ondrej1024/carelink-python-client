@@ -23,6 +23,7 @@
 #    06/02/2022 - Download new data as soon as it is available
 #    08/02/2022 - Fix HTTP API
 #    24/05/2023 - Add patient parameter
+#    12/10/2023 - Replace login parameters with initial token
 #
 #  Copyright 2021-2023, Ondrej Wisniewski 
 #
@@ -41,7 +42,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http import HTTPStatus
 
 
-VERSION = "0.6"
+VERSION = "0.7"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -55,6 +56,8 @@ OPT_NOHISTORY = "nohistory"
 
 UPDATE_INTERVAL = 300
 RETRY_INTERVAL  = 120
+
+TOKENFILE = "/tmp/cookies.json"
 
 recentData = None
 verbose = False
@@ -155,23 +158,57 @@ def start_webserver():
    t.start()
 
 
+#################################################
+# Get auth token from cookie file
+#################################################
+def getToken(filename):
+   token = None
+   country = None
+   try:
+      f = open(filename, "r")
+      cookies = json.load(f)
+      f.close()
+   except Exception as e:
+      print("Error opening " + filename + ": " + str(e))
+      return (None,None)
+
+   try:
+      for c in cookies:
+         if c["Name raw"] == "auth_tmp_token":
+            token = c["Content raw"]
+         elif c["Name raw"] == "application_country":
+            country = c["Content raw"]
+   except IndexError:
+      print("Error reading data from " + filename)
+      return (None,None)
+  
+   return (token,country)
+
+
 # Parse command line 
 parser = argparse.ArgumentParser()
-parser.add_argument('--username', '-u', type=str, help='CareLink username', required=True)
-parser.add_argument('--password', '-p', type=str, help='CareLink password', required=True)
-parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=True)
-parser.add_argument('--patient',  '-a', type=str, help='CareLink patient', required=True)
+parser.add_argument('--tokenfile','-t', type=str, help='File containing token cookies (default: %s)' % TOKENFILE, required=False)
+parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=False)
+parser.add_argument('--patient',  '-a', type=str, help='CareLink patient', required=False)
 parser.add_argument('--wait',     '-w', type=int, help='Wait seconds between repeated calls (default 300)', required=False)
 parser.add_argument('--verbose',  '-v', help='Verbose mode', action='store_true')
 args = parser.parse_args()
 
-# Get parameters
-username = args.username
-password = args.password
-country  = args.country
-patient  = args.patient
-wait     = UPDATE_INTERVAL if args.wait == None else args.wait
-verbose  = args.verbose
+# Get parameters from CLI
+tokenfile = TOKENFILE if args.tokenfile == None else args.tokenfile
+country_c = args.country
+patient   = args.patient
+wait      = UPDATE_INTERVAL if args.wait == None else args.wait
+verbose   = args.verbose
+
+# Get token and country from file
+(token,country_t) = getToken(tokenfile)
+if country_t:
+   country = country_t
+elif country_c:
+   country = country_c
+else:
+   country = None
 
 # Logging config (verbose)
 if verbose:
@@ -192,7 +229,7 @@ signal.signal(signal.SIGINT, on_sigterm)
 start_webserver()
 
 # Create Carelink client
-client = carelink_client.CareLinkClient(username, password, country, patient)
+client = carelink_client.CareLinkClient(token, country, patient)
 log.debug("Client created!")
 
 # First login to Carelink server
@@ -216,11 +253,11 @@ if client.login():
                break
             # Auth error
             elif client.getLastResponseCode() == HTTPStatus.FORBIDDEN:
-               print("GetRecentData login error (status code FORBIDDEN). Trying again in 1 sec")
-               time.sleep(1)
+               print("GetRecentData login error (status code FORBIDDEN). Trying again in 1 min")
+               time.sleep(60)
             else:
-               print("Error, response code: " + str(client.getLastResponseCode()) + " Trying again in 1 sec")
-               time.sleep(1)
+               print("Error, response code: " + str(client.getLastResponseCode()) + " Trying again in 1 min")
+               time.sleep(60)
       except Exception as e:
          print(e)
          syslog.syslog(syslog.LOG_ERR, "ERROR: %s" % (str(e)))

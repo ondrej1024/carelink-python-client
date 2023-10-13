@@ -22,6 +22,7 @@
 #    29/06/2023 - Get login parameters from response to connection request
 #    29/09/2023 - Add recaptcha workaround
 #    02/10/2023 - Add refresh of auth token
+#    09/10/2023 - Replace login procedure with initial token
 #
 #  Copyright 2021-2023, Ondrej Wisniewski 
 #
@@ -30,12 +31,13 @@
 import json
 import requests
 import time
+import base64
 import logging as log
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qsl
 
 # Version string
-VERSION = "0.8"
+VERSION = "0.9"
 
 # Constants
 CARELINK_CONNECT_SERVER_EU = "carelink.minimed.eu"
@@ -59,12 +61,16 @@ def printdbg(msg):
 
 class CareLinkClient(object):
    
-   def __init__(self, carelinkUsername, carelinkPassword, carelinkCountry, carelinkPatient):
+   def __init__(self, carelinkToken, carelinkCountry, carelinkPatient):
       
+      self.__version = VERSION
+      
+      # Authorization
+      self.__auth_token = carelinkToken
+      self.__auth_token_validto = None
+
       # User info
-      self.__carelinkUsername = carelinkUsername
-      self.__carelinkPassword = carelinkPassword
-      self.__carelinkCountry = carelinkCountry.lower()
+      self.__carelinkCountry = carelinkCountry.lower() if carelinkCountry else None
       self.__carelinkPatient = carelinkPatient
 
       # Session info
@@ -72,7 +78,8 @@ class CareLinkClient(object):
       self.__sessionProfile = None
       self.__sessionCountrySettings = None
       self.__sessionMonitorData = None
-
+      self.__sessionPatients = None
+      
       # State info
       self.__loginInProcess = False
       self.__loggedIn = False
@@ -93,7 +100,10 @@ class CareLinkClient(object):
       '''
       # Create main http client session with CookieJar
       self.__httpClient = requests.Session()
-    
+   
+   def getVersion(self):
+      return self.__version
+   
    
    def getLastDataSuccess(self):
       return self.__lastDataSuccess
@@ -117,83 +127,6 @@ class CareLinkClient(object):
       end = responseBody.find(endstr,beg)
       return responseBody[beg:end].strip("\"")
    
-
-   def __getLoginSession(self):
-      url = "https://" + self.__careLinkServer() + "/patient/sso/login"
-      payload = {"country":self.__carelinkCountry, "lang":CARELINK_LANGUAGE_EN}
-      try:
-         response = self.__httpClient.get(url, headers = self.__commonHeaders, params = payload)
-         if not response.ok:
-            raise ValueError("session response is not OK")
-         #print(response.url)  # DEBUG
-      except Exception as e:
-         printdbg(e)
-         printdbg("__getLoginSession() failed")
-      else:
-         printdbg("__getLoginSession() success")
-      
-      return response 
-
-
-   def __doLogin(self, loginSessionResponse):
-      queryParameters = dict(parse_qsl(urlparse(loginSessionResponse.url).query))
-      p = urlparse(loginSessionResponse.url)
-      url = p.scheme + "://" + p.netloc + p.path
-      payload = { "country":queryParameters["countrycode"], 
-                  "locale":queryParameters["locale"]
-                }
-      form =    { "sessionID":queryParameters["sessionID"],
-                  "sessionData":queryParameters["sessionData"],
-                  "locale":queryParameters["locale"],
-                  "action":"login",
-                  "username":self.__carelinkUsername,
-                  "password":self.__carelinkPassword,
-                  "g-recaptcha-response":"abc", # FIXME
-                  "actionButton":"Log in"
-                }
-      try:
-         response = self.__httpClient.post(url, headers = self.__commonHeaders, params = payload, data = form)
-         if not response.ok:
-            raise ValueError("session response is not OK")
-      except Exception as e:
-         printdbg(e)
-         printdbg("__doLogin() failed")
-      else:
-         printdbg("__doLogin() success")
-      
-      return response
-
-
-   def __doConsent(self, doLoginResponse):
-      # Extract data for consent
-      doLoginRespBody = doLoginResponse.text
-      url         = self.__extractResponseData(doLoginRespBody, "<form action=", " ")
-      sessionID   = self.__extractResponseData(doLoginRespBody, "<input type=\"hidden\" name=\"sessionID\" value=", ">")
-      sessionData = self.__extractResponseData(doLoginRespBody, "<input type=\"hidden\" name=\"sessionData\" value=", ">")
-   
-      # Send consent
-      form = { "action":"consent",
-               "sessionID":sessionID,
-               "sessionData":sessionData,
-               "response_type":"code",
-               "response_mode":"query"
-             }   
-      # Add header
-      consentHeaders = self.__commonHeaders
-      consentHeaders["Content-Type"] = "application/x-www-form-urlencoded"
-   
-      try:
-         response = self.__httpClient.post(url, headers = consentHeaders, data = form)
-         if not response.ok:
-            raise ValueError("session response is not OK")
-      except Exception as e:
-         printdbg(e)
-         printdbg("__doConsent() failed")
-      else:
-         printdbg("__doConsent() success")
-      
-      return response 
-
 
    def __getData(self, host, path, queryParams, requestBody):
       printdbg("__getData()")
@@ -262,6 +195,20 @@ class CareLinkClient(object):
       return self.__getData(self.__careLinkServer(), "patient/monitor/data", None, None,)
 
 
+   def __getPatients(self):
+      printdbg("__getPatients()")
+      return self.__getData(self.__careLinkServer(), "patient/m2m/links/patients", None, None,)
+
+   
+   def __selectPatient(self, patients):
+      patient = None
+      for p in patients:
+         if p["status"] == "ACTIVE":
+            patient = p
+            break
+      return patient
+
+
    # Old last24hours webapp data
    def __getLast24Hours(self):
       printdbg("__getLast24Hours")
@@ -310,38 +257,27 @@ class CareLinkClient(object):
          self.__sessionProfile = None
          self.__sessionCountrySettings = None
          self.__sessionMonitorData = None
-
-         # Open login (get SessionId and SessionData)
-         loginSessionResponse = self.__getLoginSession()
-         self.__lastResponseCode = loginSessionResponse.status_code
-      
-         # Login
-         doLoginResponse = self.__doLogin(loginSessionResponse)
-         self.__lastResponseCode = doLoginResponse.status_code
-         #setLastResponseBody(loginSessionResponse)
-         loginSessionResponse.close()
-      
-         # Consent
-         consentResponse = self.__doConsent(doLoginResponse)
-         self.__lastResponseCode = consentResponse.status_code
-         #setLastResponseBody(consentResponse);
-         doLoginResponse.close()
-         consentResponse.close()
-      
-         # Get sessions infos if required
-         if self.__sessionUser == None:
-            self.__sessionUser = self.__getMyUser()
-         if self.__sessionProfile == None:
-            self.__sessionProfile = self.__getMyProfile()
-         if self.__sessionCountrySettings == None:
-            self.__sessionCountrySettings = self.__getCountrySettings(self.__carelinkCountry, CARELINK_LANGUAGE_EN)
-         if self.__sessionMonitorData == None:
-            self.__sessionMonitorData = self.__getMonitorData()
+         self.__sessionPatients = None
+                  
+         # Get sessions infos
+         self.__sessionUser = self.__getMyUser()
+         self.__sessionProfile = self.__getMyProfile()
+         self.__sessionCountrySettings = self.__getCountrySettings(self.__carelinkCountry, CARELINK_LANGUAGE_EN)
+         self.__sessionMonitorData = self.__getMonitorData()
+         self.__sessionPatients = self.__getPatients()
+         
+         # Select first patient from list (if any)
+         patient = self.__selectPatient(self.__sessionPatients)
+         if patient:
+            self.__carelinkPatient = patient["username"]
+            log.info("Found patient %s %s (%s)" % (patient["firstName"],patient["lastName"],self.__carelinkPatient))
       
          # Set login success if everything was ok:
          if self.__sessionUser != None and self.__sessionProfile != None and self.__sessionCountrySettings != None and self.__sessionMonitorData != None:
             lastLoginSuccess = True
             log.info("Login successful")
+         else:
+            log.info("Login failed")
          
       except Exception as e:
          printdbg(e)
@@ -386,33 +322,59 @@ class CareLinkClient(object):
 
 
    def __getAuthorizationToken(self):
-      auth_token = self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME)
-      auth_token_validto = self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME)
+      auth_token = self.__auth_token
+      auth_token_validto = self.__auth_token_validto
       
       # New token is needed:
-      # a) no token or about to expire => execute authentication
-      # b) last response 401
-      if auth_token == None or auth_token_validto == None or \
-         self.__lastResponseCode in [401,403] or \
-         (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=10*60):
-         
+      # token about to expire
+      if (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=10*60):
          printdbg("now: %s" % datetime.utcnow())
          # Try to refresh token
-         if not self.__refreshToken(auth_token):
-            # Refresh failed, execute new login process
-            if self.__loginInProcess:
-               printdbg("loginInProcess")
-               return None
-            if not self.__executeLoginProcedure():
-               printdbg("__executeLoginProcedure failed")
-               return None
-         #printdbg("auth_token\n%s\n" % self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME))
-         printdbg("auth_token_validto = " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
-         log.info("New token is valid until " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
+         if self.__refreshToken(auth_token):
+            self.__auth_token = self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME)
+            self.__auth_token_validto = self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME)
+            # TODO: save token to file to reuse at restart
+            #printdbg("auth_token\n%s\n" % self.__auth_token)
+            printdbg("auth_token_validto = " + self.__auth_token_validto)
+            log.info("New token is valid until " + self.__auth_token_validto)
+         else:
+            # Refresh failed, manual login needed
+            printdbg("Manual login needed")
+            return None
 
       # there can be only one
-      return "Bearer " + self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME)
+      return "Bearer " + self.__auth_token
 
+   
+   def __checkAuthorizationToken(self):
+      token = self.__auth_token
+      try:
+         # Decode json web token payload
+         payload_b64 = token.split('.')[1]
+         payload_b64_bytes = payload_b64.encode("ascii")
+         payload_bytes = base64.b64decode(payload_b64_bytes)
+         payload = payload_bytes.decode("ascii")
+         payload_json = json.loads(payload)
+         #print(payload_json)
+         
+         # Get expiration time stamp
+         token_validto = payload_json["exp"]
+         token_validto -= 600
+      except:
+         return False
+      
+      # Check expiration time stamp
+      tdiff = token_validto - time.time()
+      if tdiff < 0:
+         log.info("Initial token has expired")
+         return False
+            
+      # Save expiration time
+      self.__auth_token_validto = datetime.utcfromtimestamp(token_validto).strftime('%a %b %d %H:%M:%S UTC %Y')
+      
+      log.info("Initial token expires in %ds (%s)" % (tdiff,self.__auth_token_validto))
+      return True
+      
 
    # Wrapper for data retrival methods
    def getRecentData(self):
@@ -431,10 +393,12 @@ class CareLinkClient(object):
    # Authentication methods
    def login(self):
       if not self.__loggedIn:
-         self.__executeLoginProcedure()
-         printdbg("now: %s" % datetime.utcnow())
-         #printdbg("auth_token\n%s\n" % self.__httpClient.cookies.get(CARELINK_AUTH_TOKEN_COOKIE_NAME))
-         printdbg("auth_token_validto = " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
-         log.info("New token is valid until " + self.__httpClient.cookies.get(CARELINK_TOKEN_VALIDTO_COOKIE_NAME))
+         if self.__checkAuthorizationToken():
+            self.__executeLoginProcedure()
+            #if self.__loggedIn:
+               #printdbg("now: %s" % datetime.utcnow())
+               #printdbg("auth_token\n%s" % self.__auth_token)
+               #printdbg("auth_token_validto = %s" % self.__auth_token_validto)
+               #log.info("New token:\n%s" % self.__auth_token)
+               #log.info("Valid until %s" % self.__auth_token_validto)
       return self.__loggedIn
-
