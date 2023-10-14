@@ -46,7 +46,7 @@ CARELINK_LANGUAGE_EN = "en"
 CARELINK_LOCALE_EN = "en"
 CARELINK_AUTH_TOKEN_COOKIE_NAME = "auth_tmp_token"
 CARELINK_TOKEN_VALIDTO_COOKIE_NAME = "c_token_valid_to"
-AUTH_EXPIRE_DEADLINE_MINUTES = 1
+AUTH_EXPIRE_DEADLINE_MINUTES = 10
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -327,7 +327,7 @@ class CareLinkClient(object):
       
       # New token is needed:
       # token about to expire
-      if (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=10*60):
+      if (datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y') - datetime.utcnow()) < timedelta(seconds=AUTH_EXPIRE_DEADLINE_MINUTES*60):
          printdbg("now: %s" % datetime.utcnow())
          # Try to refresh token
          if self.__refreshToken(auth_token):
@@ -348,10 +348,17 @@ class CareLinkClient(object):
    
    def __checkAuthorizationToken(self):
       token = self.__auth_token
+      if token == None:
+         log.info("No initial token found")
+         return False
       try:
          # Decode json web token payload
          payload_b64 = token.split('.')[1]
          payload_b64_bytes = payload_b64.encode("ascii")
+         missing_padding = 4 - len(payload_b64_bytes) % 4
+         #print("missing_padding: %d" % missing_padding)
+         if missing_padding:
+            payload_b64_bytes += b'=' * missing_padding
          payload_bytes = base64.b64decode(payload_b64_bytes)
          payload = payload_bytes.decode("ascii")
          payload_json = json.loads(payload)
@@ -361,12 +368,13 @@ class CareLinkClient(object):
          token_validto = payload_json["exp"]
          token_validto -= 600
       except:
+         log.info("Malformed initial token")
          return False
       
       # Check expiration time stamp
       tdiff = token_validto - time.time()
       if tdiff < 0:
-         log.info("Initial token has expired")
+         log.info("Initial token has expired %ds ago" % abs(tdiff))
          return False
             
       # Save expiration time
