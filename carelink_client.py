@@ -354,13 +354,13 @@ class CareLinkClient(object):
       try:
          # Decode json web token payload
          payload_b64 = token.split('.')[1]
-         payload_b64_bytes = payload_b64.encode("ascii")
+         payload_b64_bytes = payload_b64.encode()
          missing_padding = 4 - len(payload_b64_bytes) % 4
          #print("missing_padding: %d" % missing_padding)
          if missing_padding:
             payload_b64_bytes += b'=' * missing_padding
          payload_bytes = base64.b64decode(payload_b64_bytes)
-         payload = payload_bytes.decode("ascii")
+         payload = payload_bytes.decode()
          payload_json = json.loads(payload)
          #print(payload_json)
          
