@@ -160,11 +160,11 @@ class CareLinkClient(object):
                response = self.__httpClient.post(url, headers = headers, data = data)
                self.__lastResponseCode = response.status_code
                if not response.ok:
-                  printdbg(response.status_code)
                   raise ValueError("session post response is not OK")
          except Exception as e:
             printdbg(e)
             printdbg("__getData() failed")
+            log.info("__getData() failed (%d)" % response.status_code)
          else:
             jsondata = json.loads(response.text)
             self.__lastDataSuccess = True
@@ -273,7 +273,7 @@ class CareLinkClient(object):
             log.info("Found patient %s %s (%s)" % (patient["firstName"],patient["lastName"],self.__carelinkPatient))
       
          # Set login success if everything was ok:
-         if self.__sessionUser != None and self.__sessionProfile != None and self.__sessionCountrySettings != None and self.__sessionMonitorData != None:
+         if self.__sessionUser != None and self.__sessionProfile != None and self.__sessionCountrySettings != None and self.__sessionMonitorData != None and self.__carelinkPatient != None:
             lastLoginSuccess = True
             log.info("Login successful")
          else:
@@ -316,7 +316,7 @@ class CareLinkClient(object):
       except Exception as e:
          printdbg(e)
          printdbg("__refreshToken() failed")
-         log.info("Failed to refresh token")
+         log.info("Failed to refresh token (%d)" % response.status_code)
          success = False
       return success
 
@@ -341,6 +341,8 @@ class CareLinkClient(object):
             # Refresh failed, manual login needed
             printdbg("Manual login needed")
             return None
+         
+         # TODO: save new token to file
 
       # there can be only one
       return "Bearer " + self.__auth_token
@@ -355,7 +357,7 @@ class CareLinkClient(object):
          # Decode json web token payload
          payload_b64 = token.split('.')[1]
          payload_b64_bytes = payload_b64.encode()
-         missing_padding = 4 - len(payload_b64_bytes) % 4
+         missing_padding = (4 - len(payload_b64_bytes) % 4) % 4
          #print("missing_padding: %d" % missing_padding)
          if missing_padding:
             payload_b64_bytes += b'=' * missing_padding
@@ -403,10 +405,4 @@ class CareLinkClient(object):
       if not self.__loggedIn:
          if self.__checkAuthorizationToken():
             self.__executeLoginProcedure()
-            #if self.__loggedIn:
-               #printdbg("now: %s" % datetime.utcnow())
-               #printdbg("auth_token\n%s" % self.__auth_token)
-               #printdbg("auth_token_validto = %s" % self.__auth_token_validto)
-               #log.info("New token:\n%s" % self.__auth_token)
-               #log.info("Valid until %s" % self.__auth_token_validto)
       return self.__loggedIn
