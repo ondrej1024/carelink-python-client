@@ -397,6 +397,7 @@ while True:
             #print(e)
             log.info(e)
             syslog.syslog(syslog.LOG_ERR, "ERROR: %s" % (str(e)))
+            recentData = None
             break
       
          # Calculate time until next reading
