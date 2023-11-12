@@ -25,10 +25,13 @@ This is a developer version. Works for me. Extensive testing of different use ca
 
 ## Features
 
-- Login to CareLink and provide access token for CareLink API calls
+- ~~Login to CareLink and provide access token for CareLink API calls~~
+- Needs initial valid access token obtained by manual login to Carelink follower account
+- Refresh the access token before it expires
 - Some basic CareLink APIs: get user data, get user profile, get  country settings, get last 24 hours, get recent data from CareLink Cloud
 - Wrapper method for getting data uploaded by Medtronic BLE devices of the last 24 hours
 - CareLink Client CLI
+- CareLink Client Proxy
 
 
 
@@ -66,22 +69,59 @@ git clone https://github.com/ondrej1024/carelink-python-client.git
 cd carelink-python-client
 ```
 
-### Get data of last 24 hours using Python
+### Get data of last 24 hours
+
+#### Carelink Client library
+
+`carelink_client.py` is a Python module that can be used in your own Python application.
 
     import carelink_client
     
-    client = carelink_client.CareLinkClient("carelink_username", "carelink_password", "carelink_country_code", "patient_id")
+    client = carelink_client.CareLinkClient("access_token", "carelink_country_code")
     if client.login():
         recentData = client.getRecentData()
 
-### Download last 24 hours using CLI
+#### Carelink Client CLI
 
-    python carelink_client_cli.py -u carelink_username -p carelink_password -c carelink_country_code -a patient_id -d
+`carelink_client_cli.py` is an example Python application which uses the `carelink_client` library to download the patients Carelink data via command line.
 
-### Get CLI options
+    python carelink_client_cli.py -t cookies.json -d
+
+##### Get CLI options
 
     python carelink_client_cli.py -h
 
+#### Carelink Client Proxy
+
+`carelink_client_proxy.py` is a Python application which uses the `carelink_client` library. It runs as a service and downloads the patients Carelink data periodically and provide it via a simple REST API to clients in the local network.
+
+    python carelink_client_proxy.py -t cookies.json -d
+
+##### Get CLI options
+
+    python carelink_client_proxy.py -h
+
+### Token file
+
+In order to authenticate to the Carelink server, the Carelink client needs a valid access token. This can be obtained by manually logging into a Carelink follower account via Carelink web page. After successful login, the access token (plus country code) can be saved to a file using the [Cookie Quick Manager](https://addons.mozilla.org/en-US/firefox/addon/cookie-quick-manager/) Firefox plugin as follows: 
+
+- With the Carelink web page still active, open Cookie Quick Manger from the extensions menu
+- Select option "Search Cookies: carelink.minimed.eu"
+
+![Screenshot_cookie_quick_manager_options](doc/Screenshot_cookie_quick_manager_options.png)
+
+
+
+- From the new page select "Save domain to file" from the "Export/Import" icon
+
+![Screenshot_cookie_quick_manager](doc/Screenshot_cookie_quick_manager.png)
+
+
+
+- This will save a file called `cookies.json` to your download folder. Use this file with the `-t` option of the example programs
+- Now you should close the Carlink login page to avoid automatic logout after some time
+
+It is recommend to use a dedicated Carelink follower account  for this to avoid invalidating a token which Carelink client is using  when logging into the Carelink account from the web page.
 
 
 
