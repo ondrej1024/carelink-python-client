@@ -23,6 +23,7 @@ import json
 import requests
 import time
 import base64
+import os
 import logging as log
 from datetime import datetime, timedelta
 
@@ -53,83 +54,136 @@ from datetime import datetime, timedelta
 VERSION = "0.1"
 
 # DEBUG
-ACCESSTOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6ImRlZmF1bHRfc3NsX2tleSJ9.ew0KICAiaXNzIjogImh0dHBzOi8vbWR0c3RzLW9jbC5tZWR0cm9uaWMuY29tL21tY2wiLA0KICAiaWF0IjoxNzAzNzc2NTg1LA0KICAiYXVkIjoiYzE5MjE4ZjItNzE1Ny00YzkzLThmYmUtNDk2MzZlN2Y5Yzc0IiwNCiAgImV4cCI6MTcwMzc4NzU2NSwNCiAgInN1YiI6IklUYlJlcDNKQldEWVhoZ2NES1pQSmxHVUY2N201VThnWXVCeEJ0djlrOGsiLA0KICAianRpIjoiYzcxZTE3MGItOGFmNi00NTY3LTk2MDAtOTI2ZDIxODI5ZDQxIiwNCiAgInRva2VuX2RldGFpbHMiOiB7DQogICAgInNjb3BlIjoicHJvZmlsZSBvcGVuaWQgcm9sZXMgY291bnRyeSBtc3NvIG1zc29fcmVnaXN0ZXIgbXNzb19jbGllbnRfcmVnaXN0ZXIiLA0KICAgICJleHBpcmVzX2luIjoxMDk4MCwNCiAgICAidG9rZW5fdHlwZSI6IkJlYXJlciIsDQoicHJlZmVycmVkX3VzZXJuYW1lIjoib25kcmVqMjAyMyIsDQoibmFtZSI6IkplcmRubyBJa3N3ZWluc2l3IiwNCiJnaXZlbl9uYW1lIjoiSmVyZG5vIiwNCiJmYW1pbHlfbmFtZSI6Iklrc3dlaW5zaXciLA0KImxvY2FsZSI6ImVuIiwNCiJjb3VudHJ5IjogIklUIiwNCiJyb2xlcyI6WyJjYXJlX3BhcnRuZXJfb3VzIl0NCiAgfQ0KfQ.b9arU3YYByYHudXy9ixVF1MuUSz-oeHepBnT-IX3ooA9jUrF7Id7j4r-iBS8m1q6im_zA57HbHVwzphm_auUCkN1TvbfTtGsqoNNnEsGU4MWDNae1FdcLHhQImbQPGhjro-TVbh2Tw1ge6470yxJ_Yl3--lKYVj2v55-Y-L6dJpQwA5W3OpJPz8ojtsyqRgaQY_uiVovGKEybgezyPqPfUjAclHKa1mDMGTpdfGbS-Sg-l4PEW0vtA_rZvIeO_vcHRRQlAwL95BAmC__DGw5CayimS50Qg42Z3OSf_QABIP2dI6oxJZkaHu7D0fTEEKeiYfoFKmSISOecSV2zmgmuQ"
-REFRESHTOKEN="04663336-83e2-4b06-bfd3-6c319e416f50"
-MAGIDENTIFIER="VEh6UUZzanBuR0lsVUhGYVBpZDZUdkN1dlo4PQ=="
-USERNAME="ondrej2023"
+USERNAME="username"
 
 # Constants
+DEFAULT_FILENAME="logindata.json"
 CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v6/discover/android/3.1"
-
-
+COMMON_HEADERS = {
+                  "Accept": "application/json",
+                  "Content-Type": "application/json",
+                  "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Nexus 5X Build/QQ3A.200805.001)",
+                 }
+###########################################################
+# Class CareLinkClient2
+###########################################################
 class CareLinkClient2(object):
    
-   def __init__(self, accessToken=None, refreshToken=None, magIdentifier=None, userName=None):
+   def __init__(self, tokenFile=DEFAULT_FILENAME, userName=None):
       
       self.__version = VERSION
       
       # Authorization
-      self.__accessToken = accessToken
-      self.__refreshToken = refreshToken
-      self.__magIdentifier = magIdentifier
+      self.__tokenFile = tokenFile
+      self.__tokenData = self._read_token_file(self.__tokenFile)
       
       # API config
-      self.__config = None
-      #self.__api_base_url = None
+      self.__config = None # self._get_config(CARELINK_CONFIG_URL)
       
       # User info
       self.__username = userName
-      self.__role = None
-      self.__patient = None
-      #self.__carelinkCountry = carelinkCountry.lower() if carelinkCountry else None
-      #self.__carelinkPatient = carelinkPatient
+      self.__role = None # self._get_role(self.__config, self.__tokenData)
+      self.__patient = None # self._get_patient(self.__config, self.__tokenData)
       
-      self.__commonHeaders = {
-         "Accept": "application/json",
-         "Content-Type": "application/json",
-         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Nexus 5X Build/QQ3A.200805.001)",
-         }
+      # API status
+      self.__last_api_status = None
+      
+   ###########################################################
+   # Class internal functions
+   ###########################################################
+   
+   ###########################################################
+   # Read token file
+   ###########################################################
+   def _read_token_file(self, filename):
+      print("_read_token_file()")
+      token_data = None
+      if os.path.isfile(filename):
+         try:
+            token_data = json.loads(open(filename, "r").read())
+         except json.JSONDecodeError:
+            print("failed parsing json")
+
+         if token_data is not None:
+            required_fields = ["access_token", "refresh_token", "scope", "client_id", "client_secret", "mag-identifier"]
+            for i in required_fields:
+               if i not in token_data:
+                  print(f"field {i} is missing from data file")
+                  return None
+      return token_data
+
+   ###########################################################
+   # Write token file
+   ###########################################################
+   def _write_token_file(self, obj, filename):
+      print("_write_token_file()")
+      with open(filename, 'w') as f:
+         json.dump(obj, f, indent=4)
 
    def _get_config(self, config_url, is_us_region=None):
-      config_resp = requests.get(config_url).json()
+      print("_get_config()")
+      resp = requests.get(config_url)
+      print("   status: %d" % resp.status_code)
       config = None
 
-      for c in config_resp["CP"]:
-         if c['region'].lower() == "us" and is_us_region:
+      for c in resp.json()["CP"]:
+         if c["region"].lower() == "us" and is_us_region:
             config = c
-         elif c['region'].lower() == "eu" and not is_us_region:
+         elif c["region"].lower() == "eu" and not is_us_region:
             config = c
 		
       if config is None:
          raise Exception("Could not get config base urls")
 
-      #sso_config = requests.get(sso_url).json()
-      #api_base_url = f"https://{sso_config['server']['hostname']}:{sso_config['server']['port']}/{sso_config['server']['prefix']}"
+      resp = requests.get(config["SSOConfiguration"])
+      print("   status: %d" % resp.status_code)
+      sso_config = resp.json()
+      sso_base_url = f"https://{sso_config['server']['hostname']}:{sso_config['server']['port']}/{sso_config['server']['prefix']}"
+      token_url = sso_base_url + sso_config["oauth"]["system_endpoints"]["token_endpoint_path"]
+      c["token_url"] = token_url
       return config
    
-   def _get_role(self, config, magIdentifier, accessToken):
+   ###########################################################
+   # Get users Carelink role
+   ###########################################################
+   def _get_role(self, config, token_data):
+      print("_get_role()")
       url = config["baseUrlCareLink"] + "/users/me"
-      headers = self.__commonHeaders
-      headers["mag-identifier"] = magIdentifier
-      headers["Authorization"] = "Bearer " + accessToken
-      resp = requests.get(url=url,headers=headers).json()
-      role = resp["role"]
+      headers = COMMON_HEADERS
+      headers["mag-identifier"] = token_data["mag-identifier"]
+      headers["Authorization"] = "Bearer " + token_data["access_token"]
+      self.__last_api_status = None
+      resp = requests.get(url=url,headers=headers)
+      self.__last_api_status = resp.status_code
+      print("   status: %d" % resp.status_code)
+      role = resp.json()["role"]
       return role
 
-   def _get_patient(self, config, magIdentifier, accessToken):
+   ###########################################################
+   # Get patient data
+   ###########################################################
+   def _get_patient(self, config, token_data):
+      print("_get_patient()")
       url = config["baseUrlCareLink"] + "/links/patients"
-      headers = self.__commonHeaders
-      headers["mag-identifier"] = magIdentifier
-      headers["Authorization"] = "Bearer " + accessToken
-      resp = requests.get(url=url,headers=headers).json()
-      patient = resp[0]
+      headers = COMMON_HEADERS
+      headers["mag-identifier"] = token_data["mag-identifier"]
+      headers["Authorization"] = "Bearer " + token_data["access_token"]
+      self.__last_api_status = None
+      resp = requests.get(url=url,headers=headers)
+      self.__last_api_status = resp.status_code
+      print("   status: %d" % resp.status_code)
+      patient = resp.json()[0]
       return patient
 
-   def _get_data(self, config, magIdentifier, accessToken, username, role, patientid):
+   ###########################################################
+   # Get periodic pump and sensor data
+   ###########################################################
+   def _get_data(self, config, token_data, username, role, patientid):
+      print("_get_data()")
       url = config["baseUrlCumulus"] + "/display/message"
-      headers = self.__commonHeaders
-      headers["mag-identifier"] = magIdentifier
-      headers["Authorization"] = "Bearer " + accessToken
+      headers = COMMON_HEADERS
+      headers["mag-identifier"] = token_data["mag-identifier"]
+      headers["Authorization"] = "Bearer " + token_data["access_token"]
       data = {
          "username":username,
          "role":"carepartner" if role in ["CARE_PARTNER","CARE_PARTNER_OUS"] else "patient",
@@ -138,30 +192,168 @@ class CareLinkClient2(object):
       #print("url: %s" % url)
       #print("headers: %s" % json.dumps(headers))
       #print("data: %s" % json.dumps(data))
+      self.__last_api_status = None
       resp = requests.post(url=url,headers=headers,data=json.dumps(data))
-      print("status: %d" % resp.status_code)
+      self.__last_api_status = resp.status_code
+      print("   status: %d" % resp.status_code)
       return resp.json()
 
-   def init(self):
-      self.__config = self._get_config(CARELINK_CONFIG_URL)
-      print(json.dumps(self.__config))
-      self.__role = self._get_role(self.__config, self.__magIdentifier, self.__accessToken)
-      print(self.__role)
-      self.__patient = self._get_patient(self.__config, self.__magIdentifier, self.__accessToken)
-      print(json.dumps(self.__patient))
+   ###########################################################
+   # Do token data refresh
+   ###########################################################
+   def _do_refresh(self, config, token_data):
+      print("_do_refresh()")
+      token_url = config["token_url"]
+      data = {
+         "refresh_token": token_data["refresh_token"],
+         "client_id":     token_data["client_id"],
+         "client_secret": token_data["client_secret"],
+         "grant_type":    "refresh_token"
+         }
+      headers = {
+         "mag-identifier": token_data["mag-identifier"]
+         }
+      resp = requests.post(url=token_url, headers=headers, data=data)
+      print("   status: %d" % resp.status_code)
+      new_data = resp.json()
+      token_data["access_token"] = new_data["access_token"]
+      token_data["refresh_token"] = new_data["refresh_token"]
+      return token_data
+
+   ###########################################################
+   # Check access token validity
+   ###########################################################
+   def _is_token_valid(self, token_data):
+      print("_is_token_valid()")
+      try:
+         token = token_data["access_token"]
+      except:
+         print("   no access token found")
+         return False
+      try:
+         # Decode json web token payload
+         payload_b64 = token.split('.')[1]
+         payload_b64_bytes = payload_b64.encode()
+         missing_padding = (4 - len(payload_b64_bytes) % 4) % 4
+         #print("missing_padding: %d" % missing_padding)
+         if missing_padding:
+            payload_b64_bytes += b'=' * missing_padding
+         payload_bytes = base64.b64decode(payload_b64_bytes)
+         payload = payload_bytes.decode()
+         payload_json = json.loads(payload)
+         #print(payload_json)
+         
+         # Get expiration time stamp
+         token_validto = payload_json["exp"]
+      except:
+         print("   malformed access token")
+         return False
       
+      # Check expiration time stamp
+      tdiff = token_validto - time.time()
+      if tdiff < 0:
+         print("   access token has expired %ds ago" % abs(tdiff))
+         return False
+      if tdiff < 600:
+         print("   access token is about to expire in %ds" % abs(tdiff))
+         return False
+      
+      # Token is valid
+      auth_token_validto = datetime.utcfromtimestamp(token_validto).strftime('%a %b %d %H:%M:%S UTC %Y')
+      print("   access token expires in %ds (%s)" % (tdiff,auth_token_validto))
+      return True
+
+   ###########################################################
+   # Init static data
+   ###########################################################
+   def _init(self):
+      try:
+         self.__config = self._get_config(CARELINK_CONFIG_URL)
+         #print(json.dumps(self.__config))
+         self.__role = self._get_role(self.__config, self.__tokenData)
+         #print(self.__role)
+         self.__patient = self._get_patient(self.__config, self.__tokenData)
+         #print(json.dumps(self.__patient))
+      except:
+         if self.__last_api_status in [401,403]:
+            self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+            self._write_token_file(self.__tokenData, self.__tokenFile)
+            return False
+      return True
+
+
+   ###########################################################
+   # Class public functions
+   ###########################################################
+
+   ###########################################################
+   # Init object
+   ###########################################################
+   def init(self):
+      # First try
+      if self._init() == False:
+         # Second try (after token refresh)
+         if self._init() == False:
+            # Failed permanently
+            print("ERROR: unable to initialize")
+            return False
+      return True
+      
+   ###########################################################
+   # Print user info
+   ###########################################################
+   def printUserInfo(self):
+      print("User Info:")
+      print("   username: %s" % self.__username)
+      print("   role:     %s" % self.__role)
+      print("   patient:  %s (%s %s)" % (self.__patient["username"],self.__patient["firstName"],self.__patient["lastName"]))
+            
+   ###########################################################
+   # Get recent periodic pump data
+   ###########################################################
    def getRecentData(self):
-      return self._get_data(self.__config, 
-                            self.__magIdentifier, 
-                            self.__accessToken, 
+      # Check if access token is valid
+      if not self._is_token_valid(self.__tokenData):
+         self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+         self._write_token_file(self.__tokenData, self.__tokenFile)
+         if not self._is_token_valid(self.__tokenData):
+            print("ERROR: unable to get valid access token")
+            return False
+         
+      # Get data: first try
+      data = self._get_data(self.__config, 
+                            self.__tokenData, 
                             self.__username,
                             self.__role,
                             self.__patient["username"])
-
-
+      
+      if self.__last_api_status in [401,403]:
+         # Try to refresh token
+         self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+         self._write_token_file(self.__tokenData, self.__tokenFile)
+         
+         # Get data: second try 
+         data = self._get_data(self.__config, 
+                               self.__tokenData, 
+                               self.__username,
+                               self.__role,
+                               self.__patient["username"])
+         
+         if self.__last_api_status in [401,403]:
+            # Failed permanently
+            print("ERROR: unable to get data")
+            return False
+      
+      return data
+   
+   
 # MAIN (TEST)
 
-clc2 = CareLinkClient2(ACCESSTOKEN, REFRESHTOKEN, MAGIDENTIFIER, USERNAME)
-clc2.init()
-data = clc2.getRecentData()
-#print(json.dumps(data))
+clc2 = CareLinkClient2(userName=USERNAME)
+if clc2.init():
+   clc2.printUserInfo()
+   for _ in range(100):
+      data = clc2.getRecentData()
+      #print(json.dumps(data))
+      time.sleep(300)
+   
