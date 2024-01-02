@@ -55,7 +55,7 @@ VERSION = "1.0"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
-CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v6/discover/android/3.1"
+CARELINK_CONFIG_URL = "https://clcloud.minimed.com/connect/carepartner/v6/discover/android/3.1"
 AUTH_ERROR_CODES = [401,403]
 COMMON_HEADERS = {
                   "Accept": "application/json",
@@ -73,7 +73,7 @@ log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
 ###########################################################
 class CareLinkClient(object):
    
-   def __init__(self, tokenFile=DEFAULT_FILENAME, userName=None):
+   def __init__(self, tokenFile=DEFAULT_FILENAME, countryCode=None, userName=None):
       
       self.__version = VERSION
       
@@ -82,6 +82,7 @@ class CareLinkClient(object):
       self.__tokenData = self._read_token_file(self.__tokenFile)
       
       # API config
+      self.__countryCode = countryCode
       self.__config = None
       
       # User info
@@ -124,20 +125,33 @@ class CareLinkClient(object):
       with open(filename, 'w') as f:
          json.dump(obj, f, indent=4)
 
-   def _get_config(self, config_url, is_us_region=None):
+   ###########################################################
+   # Get Carelink API config
+   ###########################################################
+   def _get_config(self, discovery_url, country):
       log.debug("_get_config()")
-      resp = requests.get(config_url)
+      resp = requests.get(discovery_url)
       log.debug("   status: %d" % resp.status_code)
+      data = resp.json()
+      region = None
       config = None
 
-      for c in resp.json()["CP"]:
-         if c["region"].lower() == "us" and is_us_region:
+      for c in data["supportedCountries"]:
+         try:
+            region = c[country.upper()]["region"]
+            break
+         except KeyError:
+            pass
+      if region is None:
+         raise Exception("ERROR: country code %s is not supported" % country)
+      log.debug("   region: %s" % region)
+      
+      for c in data["CP"]:
+         if c["region"] == region:
             config = c
-         elif c["region"].lower() == "eu" and not is_us_region:
-            config = c
-		
+            break
       if config is None:
-         raise Exception("Could not get config base urls")
+         raise Exception("ERROR: failed to get config base urls for region %s" % region)
 
       resp = requests.get(config["SSOConfiguration"])
       log.debug("   status: %d" % resp.status_code)
@@ -219,6 +233,8 @@ class CareLinkClient(object):
          }
       resp = requests.post(url=token_url, headers=headers, data=data)
       log.debug("   status: %d" % resp.status_code)
+      if resp.status_code != 200:
+         raise Exception("ERROR: failed to refresh token")
       new_data = resp.json()
       token_data["access_token"] = new_data["access_token"]
       token_data["refresh_token"] = new_data["refresh_token"]
@@ -271,14 +287,18 @@ class CareLinkClient(object):
    ###########################################################
    def _init(self):
       try:
-         self.__config = self._get_config(CARELINK_CONFIG_URL)
+         self.__config = self._get_config(CARELINK_CONFIG_URL, self.__countryCode)
          self.__role = self._get_role(self.__config, self.__tokenData)
          self.__patient = self._get_patient(self.__config, self.__tokenData)
-      except:
+      except Exception as e:
+         log.debug(e)
          if self.__last_api_status in [401,403]:
-            self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
-            self._write_token_file(self.__tokenData, self.__tokenFile)
-            return False
+            try:
+               self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+               self._write_token_file(self.__tokenData, self.__tokenFile)
+            except Exception as e:
+               log.debug(e)
+         return False
       return True
 
 

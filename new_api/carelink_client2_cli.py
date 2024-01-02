@@ -45,7 +45,7 @@ def writeJson(jsonobj, name):
 # Parse command line 
 parser = argparse.ArgumentParser()
 parser.add_argument('--user',     '-u', type=str, help='CareLink user name', required=True)
-parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=False)
+parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=True)
 parser.add_argument('--repeat',   '-r', type=int, help='Repeat request times', required=False)
 parser.add_argument('--wait',     '-w', type=int, help='Wait minutes between repeated calls', required=False)
 parser.add_argument('--data',     '-d', help='Save recent data', action='store_true')
@@ -67,7 +67,7 @@ verbose  = args.verbose
 #print("verbose  = " + str(verbose))
 
 # Create client instance
-client = carelink_client_2.CareLinkClient(userName=user)
+client = carelink_client2.CareLinkClient(countryCode=country, userName=user)
 if verbose:
    print("Client created")
    
@@ -96,4 +96,4 @@ if client.init():
             print("Waiting %d minutes before next download" % wait)
          time.sleep(wait * 60)
 else:
-   print("ERROR: failed to initialize client (response code %d)" % client.getLastResponseCode())
+   print("ERROR: failed to initialize client (response code %s)" % client.getLastResponseCode())
