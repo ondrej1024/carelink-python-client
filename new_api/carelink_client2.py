@@ -65,7 +65,7 @@ COMMON_HEADERS = {
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
-log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
+log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.INFO)
 
 
 ###########################################################
@@ -101,19 +101,19 @@ class CareLinkClient(object):
    # Read token file
    ###########################################################
    def _read_token_file(self, filename):
-      log.debug("_read_token_file()")
+      log.info("_read_token_file()")
       token_data = None
       if os.path.isfile(filename):
          try:
             token_data = json.loads(open(filename, "r").read())
          except json.JSONDecodeError:
-            log.debug("   failed parsing json")
+            log.error("ERROR: failed parsing token file %s" % filename)
 
          if token_data is not None:
             required_fields = ["access_token", "refresh_token", "scope", "client_id", "client_secret", "mag-identifier"]
             for f in required_fields:
                if f not in token_data:
-                  log.debug("   field %s is missing from data file" % f)
+                  log.error("ERROR:field %s is missing from token file" % f)
                   return None
       return token_data
 
@@ -121,7 +121,7 @@ class CareLinkClient(object):
    # Write token file
    ###########################################################
    def _write_token_file(self, obj, filename):
-      log.debug("_write_token_file()")
+      log.info("_write_token_file()")
       with open(filename, 'w') as f:
          json.dump(obj, f, indent=4)
 
@@ -129,7 +129,7 @@ class CareLinkClient(object):
    # Get Carelink API config
    ###########################################################
    def _get_config(self, discovery_url, country):
-      log.debug("_get_config()")
+      log.info("_get_config()")
       resp = requests.get(discovery_url)
       log.debug("   status: %d" % resp.status_code)
       data = resp.json()
@@ -165,7 +165,7 @@ class CareLinkClient(object):
    # Get users Carelink role
    ###########################################################
    def _get_role(self, config, token_data):
-      log.debug("_get_role()")
+      log.info("_get_role()")
       url = config["baseUrlCareLink"] + "/users/me"
       headers = COMMON_HEADERS
       headers["mag-identifier"] = token_data["mag-identifier"]
@@ -181,7 +181,7 @@ class CareLinkClient(object):
    # Get patient data
    ###########################################################
    def _get_patient(self, config, token_data):
-      log.debug("_get_patient()")
+      log.info("_get_patient()")
       url = config["baseUrlCareLink"] + "/links/patients"
       headers = COMMON_HEADERS
       headers["mag-identifier"] = token_data["mag-identifier"]
@@ -190,23 +190,29 @@ class CareLinkClient(object):
       resp = requests.get(url=url,headers=headers)
       self.__last_api_status = resp.status_code
       log.debug("   status: %d" % resp.status_code)
-      patient = resp.json()[0]
+      try:
+         patient = resp.json()[0]
+      except IndexError:
+         patient = None
       return patient
 
    ###########################################################
    # Get periodic pump and sensor data
    ###########################################################
    def _get_data(self, config, token_data, username, role, patientid):
-      log.debug("_get_data()")
+      log.info("_get_data()")
       url = config["baseUrlCumulus"] + "/display/message"
       headers = COMMON_HEADERS
       headers["mag-identifier"] = token_data["mag-identifier"]
       headers["Authorization"] = "Bearer " + token_data["access_token"]
-      data = {
-         "username":username,
-         "role":"carepartner" if role in ["CARE_PARTNER","CARE_PARTNER_OUS"] else "patient",
-         "patientId":patientid
-         }
+      data = {}
+      data["username"] = username
+      if role in ["CARE_PARTNER","CARE_PARTNER_OUS"]:
+         data["role"] = "carepartner"
+         data["patientId"] = patientid
+      else:
+         data["role"] = "patient"
+         
       #log.debug("url: %s" % url)
       #log.debug("headers: %s" % json.dumps(headers))
       #log.debug("data: %s" % json.dumps(data))
@@ -220,7 +226,7 @@ class CareLinkClient(object):
    # Do token data refresh
    ###########################################################
    def _do_refresh(self, config, token_data):
-      log.debug("_do_refresh()")
+      log.info("_do_refresh()")
       token_url = config["token_url"]
       data = {
          "refresh_token": token_data["refresh_token"],
@@ -244,7 +250,7 @@ class CareLinkClient(object):
    # Check access token validity
    ###########################################################
    def _is_token_valid(self, token_data):
-      log.debug("_is_token_valid()")
+      log.info("_is_token_valid()")
       try:
          token = token_data["access_token"]
       except:
@@ -265,21 +271,21 @@ class CareLinkClient(object):
          # Get expiration time stamp
          token_validto = payload_json["exp"]
       except:
-         log.debug("   malformed access token")
+         log.info("   malformed access token")
          return False
       
       # Check expiration time stamp
       tdiff = token_validto - time.time()
       if tdiff < 0:
-         log.debug("   access token has expired %ds ago" % abs(tdiff))
+         log.info("   access token has expired %ds ago" % abs(tdiff))
          return False
       if tdiff < 600:
-         log.debug("   access token is about to expire in %ds" % abs(tdiff))
+         log.info("   access token is about to expire in %ds" % abs(tdiff))
          return False
       
       # Token is valid
       auth_token_validto = datetime.utcfromtimestamp(token_validto).strftime('%a %b %d %H:%M:%S UTC %Y')
-      log.debug("   access token expires in %ds (%s)" % (tdiff,auth_token_validto))
+      log.info("   access token expires in %ds (%s)" % (tdiff,auth_token_validto))
       return True
 
    ###########################################################
@@ -289,15 +295,16 @@ class CareLinkClient(object):
       try:
          self.__config = self._get_config(CARELINK_CONFIG_URL, self.__countryCode)
          self.__role = self._get_role(self.__config, self.__tokenData)
-         self.__patient = self._get_patient(self.__config, self.__tokenData)
+         if self.__role in ["CARE_PARTNER","CARE_PARTNER_OUS"]:
+            self.__patient = self._get_patient(self.__config, self.__tokenData)
       except Exception as e:
-         log.debug(e)
+         log.error(e)
          if self.__last_api_status in [401,403]:
             try:
                self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
                self._write_token_file(self.__tokenData, self.__tokenFile)
             except Exception as e:
-               log.debug(e)
+               log.error(e)
          return False
       return True
 
@@ -315,7 +322,7 @@ class CareLinkClient(object):
          # Second try (after token refresh)
          if self._init() == False:
             # Failed permanently
-            print("ERROR: unable to initialize")
+            log.error("ERROR: unable to initialize")
             return False
       return True
       
@@ -326,7 +333,8 @@ class CareLinkClient(object):
       print("User Info:")
       print("   username: %s" % self.__username)
       print("   role:     %s" % self.__role)
-      print("   patient:  %s (%s %s)" % (self.__patient["username"],self.__patient["firstName"],self.__patient["lastName"]))
+      if self.__patient is not None:
+         print("   patient:  %s (%s %s)" % (self.__patient["username"],self.__patient["firstName"],self.__patient["lastName"]))
             
    ###########################################################
    # Get recent periodic pump data
@@ -337,15 +345,20 @@ class CareLinkClient(object):
          self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
          self._write_token_file(self.__tokenData, self.__tokenFile)
          if not self._is_token_valid(self.__tokenData):
-            print("ERROR: unable to get valid access token")
+            log.error("ERROR: unable to get valid access token")
             return False
          
+      if self.__patient is not None:
+         patientId = self.__patient["username"]
+      else:
+         patientId = None
+      
       # Get data: first try
       data = self._get_data(self.__config, 
                             self.__tokenData, 
                             self.__username,
                             self.__role,
-                            self.__patient["username"])
+                            patientId)
       # Check API response
       if self.__last_api_status in AUTH_ERROR_CODES:
          # Try to refresh token
@@ -357,13 +370,12 @@ class CareLinkClient(object):
                                self.__tokenData, 
                                self.__username,
                                self.__role,
-                               self.__patient["username"])
+                               patientId)
          # Check API response
          if self.__last_api_status in AUTH_ERROR_CODES:
             # Failed permanently
-            print("ERROR: unable to get data")
-            return False
-      
+            log.error("ERROR: unable to get data")
+            return False      
       return data
 
    ###########################################################
