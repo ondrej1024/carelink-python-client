@@ -79,7 +79,7 @@ class CareLinkClient(object):
       
       # Authorization
       self.__tokenFile = tokenFile
-      self.__tokenData = self._read_token_file(self.__tokenFile)
+      self.__tokenData = None
       
       # API config
       self.__countryCode = countryCode
@@ -113,8 +113,9 @@ class CareLinkClient(object):
             required_fields = ["access_token", "refresh_token", "scope", "client_id", "client_secret", "mag-identifier"]
             for f in required_fields:
                if f not in token_data:
-                  log.error("ERROR:field %s is missing from token file" % f)
-                  return None
+                  log.error("ERROR: field %s is missing from token file" % f)
+      else:
+         log.error("ERROR: token file %s not found" % filename)
       return token_data
 
    ###########################################################
@@ -292,6 +293,9 @@ class CareLinkClient(object):
    # Init static data
    ###########################################################
    def _init(self):
+      self.__tokenData = self._read_token_file(self.__tokenFile)
+      if self.__tokenData is None:
+         return False
       try:
          self.__config = self._get_config(CARELINK_CONFIG_URL, self.__countryCode)
          self.__role = self._get_role(self.__config, self.__tokenData)
