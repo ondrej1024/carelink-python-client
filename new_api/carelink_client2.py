@@ -73,22 +73,23 @@ log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.INFO)
 ###########################################################
 class CareLinkClient(object):
    
-   def __init__(self, tokenFile=DEFAULT_FILENAME, countryCode=None, userName=None):
+   def __init__(self, tokenFile=DEFAULT_FILENAME):
       
       self.__version = VERSION
       
       # Authorization
       self.__tokenFile = tokenFile
       self.__tokenData = None
+      self.__accessTokenPayload = None
       
       # API config
-      self.__countryCode = countryCode
       self.__config = None
       
       # User info
-      self.__username = userName
-      self.__role = None 
+      self.__username = None
+      self.__user = None
       self.__patient = None 
+      self.__country = None
       
       # API status
       self.__last_api_status = None
@@ -163,10 +164,10 @@ class CareLinkClient(object):
       return config
    
    ###########################################################
-   # Get users Carelink role
+   # Get user data
    ###########################################################
-   def _get_role(self, config, token_data):
-      log.info("_get_role()")
+   def _get_user(self, config, token_data):
+      log.info("_get_user()")
       url = config["baseUrlCareLink"] + "/users/me"
       headers = COMMON_HEADERS
       headers["mag-identifier"] = token_data["mag-identifier"]
@@ -175,8 +176,11 @@ class CareLinkClient(object):
       resp = requests.get(url=url,headers=headers)
       self.__last_api_status = resp.status_code
       log.debug("   status: %d" % resp.status_code)
-      role = resp.json()["role"]
-      return role
+      try:
+         user = resp.json()
+      except IndexError:
+         user = None
+      return user
 
    ###########################################################
    # Get patient data
@@ -212,11 +216,11 @@ class CareLinkClient(object):
          data["role"] = "carepartner"
          data["patientId"] = patientid
       else:
-         data["role"] = "patient"
-         
+         data["role"] = "patient"         
       #log.debug("url: %s" % url)
       #log.debug("headers: %s" % json.dumps(headers))
       #log.debug("data: %s" % json.dumps(data))
+      
       self.__last_api_status = None
       resp = requests.post(url=url,headers=headers,data=json.dumps(data))
       self.__last_api_status = resp.status_code
@@ -248,15 +252,15 @@ class CareLinkClient(object):
       return token_data
 
    ###########################################################
-   # Check access token validity
+   # Get access token payload 
    ###########################################################
-   def _is_token_valid(self, token_data):
-      log.info("_is_token_valid()")
+   def _get_access_token_payload(self, token_data):
+      log.info("_get_access_token_payload()")
       try:
          token = token_data["access_token"]
       except:
          log.debug("   no access token found")
-         return False
+         return None
       try:
          # Decode json web token payload
          payload_b64 = token.split('.')[1]
@@ -268,11 +272,21 @@ class CareLinkClient(object):
          payload = payload_bytes.decode()
          payload_json = json.loads(payload)
          #log.debug(payload_json)
-         
-         # Get expiration time stamp
-         token_validto = payload_json["exp"]
       except:
          log.info("   malformed access token")
+         return None
+      return payload_json
+
+   ###########################################################
+   # Check access token validity
+   ###########################################################
+   def _is_token_valid(self, access_token_payload):
+      log.info("_is_token_valid()")
+      try:
+         # Get expiration time stamp
+         token_validto = access_token_payload["exp"]
+      except:
+         log.info("   missing data in access token")
          return False
       
       # Check expiration time stamp
@@ -296,16 +310,22 @@ class CareLinkClient(object):
       self.__tokenData = self._read_token_file(self.__tokenFile)
       if self.__tokenData is None:
          return False
+      self.__accessTokenPayload = self._get_access_token_payload(self.__tokenData)
+      if self.__accessTokenPayload is None:
+         return False
       try:
-         self.__config = self._get_config(CARELINK_CONFIG_URL, self.__countryCode)
-         self.__role = self._get_role(self.__config, self.__tokenData)
-         if self.__role in ["CARE_PARTNER","CARE_PARTNER_OUS"]:
+         self.__country = self.__accessTokenPayload["token_details"]["country"]
+         self.__config = self._get_config(CARELINK_CONFIG_URL, self.__country)
+         self.__username = self.__accessTokenPayload["token_details"]["preferred_username"]
+         self.__user = self._get_user(self.__config, self.__tokenData)
+         if self.__user["role"] in ["CARE_PARTNER","CARE_PARTNER_OUS"]:
             self.__patient = self._get_patient(self.__config, self.__tokenData)
       except Exception as e:
          log.error(e)
          if self.__last_api_status in [401,403]:
             try:
                self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+               self.__accessTokenPayload = self._get_access_token_payload(self.__tokenData)
                self._write_token_file(self.__tokenData, self.__tokenFile)
             except Exception as e:
                log.error(e)
@@ -335,8 +355,9 @@ class CareLinkClient(object):
    ###########################################################
    def printUserInfo(self):
       print("User Info:")
-      print("   username: %s" % self.__username)
-      print("   role:     %s" % self.__role)
+      print("   user:     %s (%s %s)" % (self.__username, self.__user["firstName"], self.__user["lastName"]))
+      print("   role:     %s" % self.__user["role"])
+      print("   country:  %s" % self.__country)
       if self.__patient is not None:
          print("   patient:  %s (%s %s)" % (self.__patient["username"],self.__patient["firstName"],self.__patient["lastName"]))
             
@@ -345,12 +366,13 @@ class CareLinkClient(object):
    ###########################################################
    def getRecentData(self):
       # Check if access token is valid
-      if not self._is_token_valid(self.__tokenData):
+      if not self._is_token_valid(self.__accessTokenPayload):
          self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+         self.__accessTokenPayload = self._get_access_token_payload(self.__tokenData)
          self._write_token_file(self.__tokenData, self.__tokenFile)
-         if not self._is_token_valid(self.__tokenData):
+         if not self._is_token_valid(self.__accessTokenPayload):
             log.error("ERROR: unable to get valid access token")
-            return False
+            return None
          
       if self.__patient is not None:
          patientId = self.__patient["username"]
@@ -361,25 +383,26 @@ class CareLinkClient(object):
       data = self._get_data(self.__config, 
                             self.__tokenData, 
                             self.__username,
-                            self.__role,
+                            self.__user["role"],
                             patientId)
       # Check API response
       if self.__last_api_status in AUTH_ERROR_CODES:
          # Try to refresh token
          self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
+         self.__accessTokenPayload = self._get_access_token_payload(self.__tokenData)
          self._write_token_file(self.__tokenData, self.__tokenFile)
          
          # Get data: second try 
          data = self._get_data(self.__config, 
                                self.__tokenData, 
                                self.__username,
-                               self.__role,
+                               self.__user["role"],
                                patientId)
          # Check API response
          if self.__last_api_status in AUTH_ERROR_CODES:
             # Failed permanently
             log.error("ERROR: unable to get data")
-            return False      
+            return None
       return data
 
    ###########################################################

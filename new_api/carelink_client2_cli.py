@@ -44,8 +44,6 @@ def writeJson(jsonobj, name):
 
 # Parse command line 
 parser = argparse.ArgumentParser()
-parser.add_argument('--user',     '-u', type=str, help='CareLink user name', required=True)
-parser.add_argument('--country',  '-c', type=str, help='CareLink two letter country code', required=True)
 parser.add_argument('--repeat',   '-r', type=int, help='Repeat request times', required=False)
 parser.add_argument('--wait',     '-w', type=int, help='Wait minutes between repeated calls', required=False)
 parser.add_argument('--data',     '-d', help='Save recent data', action='store_true')
@@ -53,21 +51,18 @@ parser.add_argument('--verbose',  '-v', help='Verbose mode', action='store_true'
 args = parser.parse_args()
 
 # Get parameters from CLI
-user     = args.user
-country  = args.country
 repeat   = 1 if args.repeat == None else args.repeat
 wait     = 5 if args.wait == None else args.wait
 data     = args.data
 verbose  = args.verbose
 
-#print("country  = " + country)
 #print("repeat   = " + str(repeat))
 #print("wait     = " + str(wait))
 #print("data     = " + str(data))
 #print("verbose  = " + str(verbose))
 
 # Create client instance
-client = carelink_client2.CareLinkClient(countryCode=country, userName=user)
+client = carelink_client2.CareLinkClient()
 if verbose:
    print("Client created")
    
@@ -78,7 +73,7 @@ if client.init():
          print("Starting download, count: %d" % (i+1))
       try:
          recentData = client.getRecentData()
-         if client.getLastResponseCode() == 200:
+         if recentData != None and client.getLastResponseCode() == 200:
             if(data):
                if writeJson(recentData, "data"):
                   if verbose:
