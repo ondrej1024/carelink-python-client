@@ -91,7 +91,7 @@ The Carelink Client reads this file from the local folder and it will take care 
 
     import carelink_client2
     
-    client = carelink_client2.CareLinkClient(countryCode=country, userName=user)
+    client = carelink_client2.CareLinkClient(tokenFile="logindata.json")
     if client.init():
         client.printUserInfo()
         recentData = client.getRecentData()
@@ -100,7 +100,7 @@ The Carelink Client reads this file from the local folder and it will take care 
 
 `carelink_client2_cli.py` is an example Python application which uses the `carelink_client2` library to download the patients Carelink data via command line.
 
-    python carelink_client2_cli.py -u <username> -c <countrycode> -d
+    python carelink_client2_cli.py -d
 
 ##### Get CLI options
 
