@@ -116,6 +116,23 @@ The Carelink Client reads this file from the local folder and it will take care 
 
     python carelink_client2_proxy.py -h
 
+##### API endpoints
+
+The proxy provides the following API endpoints which can be queried with an HTTP `GET` request:
+
+* `<proxy IP address>:8081` (Status info)
+* `<proxy IP address>:8081/carelink` (complete data, in json format)
+* `<proxy IP address>:8081/carelink/nohistory` (only current data without last 24h history, in json format)
+
+For documentation of the data format see [carelink-data.ods](../doc/carelink-data.ods)
+
+
+##### Systemd service
+
+To run the proxy automatically at system start it can be installed as systemd service using the provided service file:
+
+[systemd/carelink2-proxy.service](systemd/carelink2-proxy.service)
+
 
 
 ## Credits
