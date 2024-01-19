@@ -1,6 +1,6 @@
 [Unit]
 Description=Carelink Client Proxy
-After=syslog.target network.target
+After=syslog.target network-online.target
 
 [Service]
 ExecStart=python3 /usr/local/carelink/carelink_client2_proxy.py -t /var/lib/carelink/logindata.json
@@ -9,4 +9,3 @@ RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
- 
