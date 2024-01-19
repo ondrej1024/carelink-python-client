@@ -124,7 +124,7 @@ The proxy provides the following API endpoints which can be queried with an HTTP
 * `<proxy IP address>:8081/carelink` (complete data, in json format)
 * `<proxy IP address>:8081/carelink/nohistory` (only current data without last 24h history, in json format)
 
-For documentation of the data format see [carelink-data.ods](../doc/carelink-data.ods)
+For documentation of the data format see [carelink-data.ods](doc/carelink-data.ods)
 
 
 ##### Systemd service
