@@ -101,6 +101,8 @@ def reformat_csr(csr):
 	return csr
 
 def do_captcha(url, redirect_url):
+	print("opening Firefox instance...")
+	print("Warning: you may need to close Firefox if it's already running or nothing happens!")
 	driver = webdriver.Firefox()
 	driver.get(url)
 
