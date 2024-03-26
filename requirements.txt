@@ -1,0 +1,4 @@
+curlify==2.2.1
+pyOpenSSL==24.0.0
+Requests==2.31.0
+selenium_wire==5.1.0
