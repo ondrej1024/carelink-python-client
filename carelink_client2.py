@@ -14,8 +14,9 @@
 #  Changelog:
 #
 #    28/12/2023 - Initial version
+#    11/04/2024 - Check for valid data in API response in _get_data()
 #
-#  Copyright 2023, Ondrej Wisniewski 
+#  Copyright 2023-2024, Ondrej Wisniewski 
 #
 ###############################################################################
 
@@ -51,7 +52,7 @@ from datetime import datetime, timedelta
 
  
 # Version string
-VERSION = "1.0"
+VERSION = "1.1"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
@@ -178,7 +179,7 @@ class CareLinkClient(object):
       log.debug("   status: %d" % resp.status_code)
       try:
          user = resp.json()
-      except IndexError:
+      except:
          user = None
       return user
 
@@ -197,7 +198,7 @@ class CareLinkClient(object):
       log.debug("   status: %d" % resp.status_code)
       try:
          patient = resp.json()[0]
-      except IndexError:
+      except:
          patient = None
       return patient
 
@@ -225,7 +226,11 @@ class CareLinkClient(object):
       resp = requests.post(url=url,headers=headers,data=json.dumps(data))
       self.__last_api_status = resp.status_code
       log.debug("   status: %d" % resp.status_code)
-      return resp.json()
+      try:
+         my_data = resp.json()
+      except:
+         my_data = None
+      return my_data
 
    ###########################################################
    # Do token data refresh
