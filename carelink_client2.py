@@ -327,7 +327,7 @@ class CareLinkClient(object):
             self.__patient = self._get_patient(self.__config, self.__tokenData)
       except Exception as e:
          log.error(e)
-         if self.__last_api_status in [401,403]:
+         if self.__last_api_status in AUTH_ERROR_CODES:
             try:
                self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
                self.__accessTokenPayload = self._get_access_token_payload(self.__tokenData)

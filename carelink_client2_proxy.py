@@ -26,6 +26,7 @@
 #    12/10/2023 - Replace login parameters with initial token
 #    27/10/2023 - Add Web GUI to insert auth token
 #    03/01/2024 - Porting to Carelink Client 2
+#    11/04/2024 - Handle reconnection in case of network error
 #
 #  Copyright 2021-2024, Ondrej Wisniewski 
 #
@@ -44,11 +45,11 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 
-VERSION = "1.0"
+VERSION = "1.1"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
-log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
+log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.INFO)
 
 # HTTP server settings
 HOSTNAME = "0.0.0.0"
@@ -267,10 +268,7 @@ verbose   = args.verbose
 
 # Logging config (verbose)
 if verbose:
-   FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
-   log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.DEBUG)
-else:
-   log.disable(level=log.DEBUG)
+   log.enable(level=log.DEBUG)
 
 log.info("Starting Carelink Client Proxy (version %s)" % VERSION)
 
@@ -301,14 +299,20 @@ while True:
             recentData = client.getRecentData()
             if recentData != None and client.getLastResponseCode() == HTTPStatus.OK:
                log.debug("New data received")
-            else:
-               # Error occured
-               log.error("ERROR: failed to get data (response code %d)" % client.getLastResponseCode())
+            elif client.getLastResponseCode() == HTTPStatus.FORBIDDEN or client.getLastResponseCode() == HTTPStatus.UNAUTHORIZED:
+               # Authorization error occured
+               log.error("ERROR: failed to get data (Authotization error, response code %d)" % client.getLastResponseCode())
                break
+            else:
+               # Connection error occured
+               log.error("ERROR: failed to get data (Connection error, response code %d)" % client.getLastResponseCode())
+               time.sleep(60)
+               continue
          except Exception as e:
             log.error(e)
             recentData = None
-            break
+            time.sleep(60)
+            continue
             
          # Calculate time until next reading
          try:
