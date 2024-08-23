@@ -31,6 +31,7 @@
 #     - seleniumwire
 #
 ###############################################################################
+import argparse
 import base64
 import hashlib
 import json
@@ -261,17 +262,22 @@ logindata_file = 'logindata.json'
 discovery_url = 'https://clcloud.minimed.eu/connect/carepartner/v6/discover/android/3.1'
 rsa_keysize = 2048
 
-def main():
+def main(is_us_region):
 	if is_debug:
 		setup_logging()
 
 	token_data = read_data_file(logindata_file)
-	
+
 	if token_data == None:
 		print(f"performing login...")
-		endpoint_config = resolve_endpoint_config(discovery_url)
+		endpoint_config = resolve_endpoint_config(discovery_url, is_us_region=is_us_region)
 		token_data = do_login(endpoint_config)
 	else:
 		print(f"token data file already exists")
-		
-main()
+
+# Parse command line
+parser = argparse.ArgumentParser()
+parser.add_argument('--us', help='Specify US region', default=False, action='store_true')
+args = parser.parse_args()
+
+main(args.us)
