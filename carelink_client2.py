@@ -15,6 +15,7 @@
 #
 #    28/12/2023 - Initial version
 #    11/04/2024 - Check for valid data in API response in _get_data()
+#    19/11/2024 - Update CARELINK_CONFIG_URL
 #
 #  Copyright 2023-2024, Ondrej Wisniewski 
 #
@@ -52,11 +53,11 @@ from datetime import datetime, timedelta
 
  
 # Version string
-VERSION = "1.1"
+VERSION = "1.2"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
-CARELINK_CONFIG_URL = "https://clcloud.minimed.com/connect/carepartner/v6/discover/android/3.1"
+CARELINK_CONFIG_URL = "https://clcloud.minimed.com/connect/carepartner/v11/discover/android/3.2"
 AUTH_ERROR_CODES = [401,403]
 COMMON_HEADERS = {
                   "Accept": "application/json",
