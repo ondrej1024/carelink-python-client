@@ -57,7 +57,7 @@ VERSION = "1.2"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
-CARELINK_CONFIG_URL = "https://clcloud.minimed.com/connect/carepartner/v11/discover/android/3.2"
+CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v11/discover/android/3.2"
 AUTH_ERROR_CODES = [401,403]
 COMMON_HEADERS = {
                   "Accept": "application/json",

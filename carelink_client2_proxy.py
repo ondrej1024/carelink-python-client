@@ -27,8 +27,9 @@
 #    27/10/2023 - Add Web GUI to insert auth token
 #    03/01/2024 - Porting to Carelink Client 2
 #    11/04/2024 - Handle reconnection in case of network error
+#    17/01/2025 - Adapt get_essential_data() to new data format
 #
-#  Copyright 2021-2024, Ondrej Wisniewski 
+#  Copyright 2021-2025, Ondrej Wisniewski
 #
 ###############################################################################
 
@@ -45,7 +46,7 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 
-VERSION = "1.1"
+VERSION = "1.2"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -91,7 +92,7 @@ def on_sigterm(signum, frame):
 def get_essential_data(data):
    mydata = ""
    if data != None:      
-      mydata = data.copy()
+      mydata = data["patientData"].copy()
       try:
          del mydata["sgs"]
       except (KeyError,TypeError) as e:
