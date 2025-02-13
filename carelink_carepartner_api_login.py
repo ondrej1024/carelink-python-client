@@ -50,7 +50,8 @@ import requests
 import curlify
 import OpenSSL
 from seleniumwire import webdriver
-
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 
 def setup_logging():
 	HTTPConnection.debuglevel = 1
@@ -105,7 +106,9 @@ def reformat_csr(csr):
 def do_captcha(url, redirect_url):
 	print("opening Firefox instance...")
 	print("Warning: you may need to close Firefox if it's already running or nothing happens!")
-	driver = webdriver.Firefox()
+	options = Options()
+	service = Service(executable_path="/snap/bin/geckodriver")
+	driver = webdriver.Firefox(options=options, service=service)
 	driver.get(url)
 
 	while True:
