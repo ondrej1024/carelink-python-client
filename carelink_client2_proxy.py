@@ -35,9 +35,11 @@
 ###############################################################################
 
 import carelink_client2
+from carelink_storage import CareLinkStorage
 import argparse
 import time
 import json
+import os
 import sys
 import signal
 import threading 
@@ -259,14 +261,18 @@ def start_webserver():
 # Parse command line 
 parser = argparse.ArgumentParser()
 parser.add_argument('--tokenfile','-t', type=str, help='File containing auth tokens (default: %s)' % TOKENFILE, required=False)
+parser.add_argument('--database', '-b', type=str, help='DuckDB file (default: carelink.duckdb beside the token file)', required=False)
 parser.add_argument('--wait',     '-w', type=int, help='Wait seconds between repeated calls (default 300)', required=False)
 parser.add_argument('--verbose',  '-v', help='Verbose mode', action='store_true')
 args = parser.parse_args()
 
 # Get parameters from CLI
 tokenfile = TOKENFILE if args.tokenfile == None else args.tokenfile
+database  = (os.path.join(os.path.dirname(os.path.abspath(tokenfile)), "carelink.duckdb")
+             if args.database == None else args.database)
 wait      = UPDATE_INTERVAL if args.wait == None else args.wait
 verbose   = args.verbose
+storage   = CareLinkStorage(database)
 
 # Logging config (verbose)
 if verbose:
@@ -299,8 +305,18 @@ while True:
          log.debug("Starting download %d" % i)
 
          try:
-            recentData = client.getRecentData()
-            if recentData != None and client.getLastResponseCode() == HTTPStatus.OK:
+            downloadedData = client.getRecentData()
+            if downloadedData != None and client.getLastResponseCode() == HTTPStatus.OK:
+               # The response contains CareLink's complete currently available
+               # history window (normally about 24 hours). Persist it before
+               # replacing the response exposed by the local HTTP endpoint.
+               try:
+                  storage.save(downloadedData)
+               except Exception as e:
+                  # Keep polling and serving the latest API response if storage
+                  # is temporarily unavailable; the next poll retries the save.
+                  log.error("ERROR: failed to save CareLink data to DuckDB: %s", e)
+               recentData = downloadedData
                log.debug("New data received")
             elif client.getLastResponseCode() == HTTPStatus.FORBIDDEN or client.getLastResponseCode() == HTTPStatus.UNAUTHORIZED:
                # Authorization error occured
@@ -313,7 +329,6 @@ while True:
                continue
          except Exception as e:
             log.error(e)
-            recentData = None
             time.sleep(60)
             continue
             
