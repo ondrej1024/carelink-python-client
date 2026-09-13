@@ -3,7 +3,7 @@ Description=Carelink Client Proxy
 After=syslog.target network-online.target
 
 [Service]
-ExecStart=python3 /usr/local/carelink/carelink_client2_proxy.py -t /var/lib/carelink/logindata.json
+ExecStart=python3 /usr/local/carelink/carelink_client2_proxy.py -t /var/lib/carelink/logindata.json --replica-database /var/lib/grafana/carelink-grafana.duckdb
 Restart=always
 RestartSec=30
 

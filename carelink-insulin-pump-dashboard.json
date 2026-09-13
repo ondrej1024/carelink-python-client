@@ -1,0 +1,1802 @@
+{
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "carelink-insulin-pump"
+  },
+  "spec": {
+    "title": "Type 1 diabetes \u2014 CareLink pump & CGM",
+    "tags": [
+      "carelink",
+      "t1d",
+      "cgm",
+      "insulin-pump",
+      "retrospective"
+    ],
+    "editable": true,
+    "cursorSync": "Crosshair",
+    "liveNow": false,
+    "timeSettings": {
+      "from": "now-24h",
+      "to": "now",
+      "timezone": "browser",
+      "autoRefresh": "5m",
+      "autoRefreshIntervals": [
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "1h"
+      ],
+      "hideTimepicker": false,
+      "fiscalYearStartMonth": 0
+    },
+    "annotations": [
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "builtIn": true,
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "query": {
+            "datasource": {
+              "name": "-- Grafana --"
+            },
+            "group": "grafana",
+            "kind": "DataQuery",
+            "spec": {},
+            "version": "v0"
+          }
+        }
+      }
+    ],
+    "elements": {
+      "current-glucose": {
+        "kind": "Panel",
+        "spec": {
+          "id": 1,
+          "title": "Latest sensor glucose",
+          "description": "Latest valid SG, converted from the API integer to mmol/L because the latest pump snapshot reports bgUnits=MMOL_L.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT ROUND(TRY_CAST((payload ->> 'sg') AS DOUBLE) / 18.0182, 1) AS \"Glucose (mmol/L)\"\nFROM carelink_history\nWHERE record_type = 'sgs' AND TRY_CAST((payload ->> 'sg') AS DOUBLE) > 0\nORDER BY CAST(event_time AS TIMESTAMP) DESC LIMIT 1"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "decimals": 1,
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "unit": "conmmolL",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 3.9
+                      },
+                      {
+                        "color": "green",
+                        "value": 4.0
+                      },
+                      {
+                        "color": "orange",
+                        "value": 10.1
+                      },
+                      {
+                        "color": "red",
+                        "value": 13.9
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "orientation": "auto",
+                "textMode": "value_and_name",
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto"
+              }
+            }
+          }
+        }
+      },
+      "current-pump-status": {
+        "kind": "Panel",
+        "spec": {
+          "id": 2,
+          "title": "Current pump status",
+          "description": "Latest state snapshot: reservoir, batteries, connectivity, automation and reported glucose unit.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  fetched_at AS \"Fetched at\",\n  payload -> 'patientData' ->> 'bgUnits' AS \"Reported unit\",\n  TRY_CAST((payload -> 'patientData' ->> 'reservoirRemainingUnits') AS DOUBLE) AS \"Reservoir (U)\",\n  TRY_CAST((payload -> 'patientData' ->> 'pumpBatteryLevelPercent') AS DOUBLE) AS \"Pump battery (%)\",\n  TRY_CAST((payload -> 'patientData' ->> 'gstBatteryLevel') AS DOUBLE) AS \"Transmitter battery (%)\",\n  payload -> 'patientData' ->> 'lastSGTrend' AS \"SG trend\",\n  payload -> 'patientData' -> 'therapyAlgorithmState' ->> 'autoModeShieldState' AS \"Automation state\",\n  payload -> 'patientData' ->> 'pumpSuspended' AS \"Pump suspended\",\n  payload -> 'patientData' ->> 'conduitInRange' AS \"Conduit in range\",\n  payload -> 'patientData' ->> 'conduitSensorInRange' AS \"Sensor in range\"\nFROM carelink_snapshots\nORDER BY fetched_at DESC\nLIMIT 1"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "glucose-trend": {
+        "kind": "Panel",
+        "spec": {
+          "id": 3,
+          "title": "Sensor glucose trend",
+          "description": "CGM trace in mmol/L. Guide lines use the common 3.9\u201310.0 mmol/L reporting range; this is retrospective information, not dosing guidance.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT CAST(event_time AS TIMESTAMP) AS time,\n ROUND(TRY_CAST((payload ->> 'sg') AS DOUBLE) / 18.0182, 2) AS \"SG (mmol/L)\",\n 3.9 AS \"Low guide\", 10.0 AS \"High guide\"\nFROM carelink_history\nWHERE record_type='sgs' AND TRY_CAST((payload ->> 'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)) ORDER BY time"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 2,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  },
+                  "unit": "conmmolL"
+                },
+                "overrides": []
+              },
+              "options": {
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                },
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "min",
+                    "max",
+                    "mean",
+                    "lastNotNull"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "glucose-summary": {
+        "kind": "Panel",
+        "spec": {
+          "id": 4,
+          "title": "Glucose summary",
+          "description": "Aggregation of positive sensor-glucose readings in the selected time range.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH x AS (\n SELECT TRY_CAST((payload->>'sg') AS DOUBLE) sg FROM carelink_history\n WHERE record_type='sgs' AND TRY_CAST((payload->>'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)))\nSELECT COUNT(*) readings, ROUND(AVG(sg)/18.0182,2) AS \"Mean mmol/L\",\n ROUND(MEDIAN(sg)/18.0182,2) AS \"Median mmol/L\", ROUND(MIN(sg)/18.0182,2) AS \"Minimum mmol/L\",\n ROUND(MAX(sg)/18.0182,2) AS \"Maximum mmol/L\", ROUND(STDDEV_SAMP(sg)/18.0182,2) AS \"SD mmol/L\"\nFROM x"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "hourly-glucose": {
+        "kind": "Panel",
+        "spec": {
+          "id": 5,
+          "title": "Hourly glucose aggregation",
+          "description": "Hourly average, minimum and maximum positive sensor-glucose readings.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT date_trunc('hour',CAST(event_time AS TIMESTAMP)) AS time,\n AVG(TRY_CAST((payload->>'sg') AS DOUBLE))/18.0182 AS average,\n MIN(TRY_CAST((payload->>'sg') AS DOUBLE))/18.0182 AS minimum,\n MAX(TRY_CAST((payload->>'sg') AS DOUBLE))/18.0182 AS maximum\nFROM carelink_history WHERE record_type='sgs' AND TRY_CAST((payload->>'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)) GROUP BY 1 ORDER BY 1"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "drawStyle": "line",
+                    "lineWidth": 2,
+                    "fillOpacity": 5
+                  },
+                  "unit": "conmmolL"
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "min",
+                    "max",
+                    "mean"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              }
+            }
+          }
+        }
+      },
+      "auto-basal": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Auto-basal delivery markers",
+          "description": "AUTO_BASAL_DELIVERY marker field named bolusAmount by the CareLink API. This is displayed without reinterpreting it as a treatment recommendation.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  CAST(event_time AS TIMESTAMP) AS time,\n  TRY_CAST((payload -> 'data' -> 'dataValues' ->> 'bolusAmount') AS DOUBLE) AS delivery\nFROM carelink_history\nWHERE record_type = 'markers'\n  AND (payload ->> 'type') = 'AUTO_BASAL_DELIVERY'\n  AND $__timeFilter(CAST(event_time AS TIMESTAMP))\nORDER BY time"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "drawStyle": "bars",
+                    "lineWidth": 1,
+                    "fillOpacity": 80
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "sum",
+                    "mean",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "single",
+                  "sort": "none"
+                }
+              }
+            }
+          }
+        }
+      },
+      "active-insulin": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
+          "title": "Active insulin",
+          "description": "Active-insulin amount snapshots reported by CareLink.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  CAST(event_time AS TIMESTAMP) AS time,\n  TRY_CAST((payload ->> 'amount') AS DOUBLE) AS active_insulin\nFROM carelink_history\nWHERE record_type = 'activeInsulin'\n  AND $__timeFilter(CAST(event_time AS TIMESTAMP))\nORDER BY time"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "insulinUnits",
+                  "custom": {
+                    "drawStyle": "line",
+                    "lineWidth": 2,
+                    "fillOpacity": 10
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "lastNotNull",
+                    "min",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              }
+            }
+          }
+        }
+      },
+      "marker-counts": {
+        "kind": "Panel",
+        "spec": {
+          "id": 8,
+          "title": "Pump event counts by type",
+          "description": "Counts of every CareLink marker type returned in the selected time range.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  (payload ->> 'type') AS marker_type,\n  COUNT(*) AS events\nFROM carelink_history\nWHERE record_type = 'markers'\n  AND $__timeFilter(CAST(event_time AS TIMESTAMP))\nGROUP BY 1\nORDER BY 2 DESC"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "barchart",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "orientation": "auto",
+                "xField": "marker_type",
+                "showValue": "auto",
+                "stacking": "none",
+                "groupWidth": 0.7,
+                "barWidth": 0.9
+              }
+            }
+          }
+        }
+      },
+      "markers-table": {
+        "kind": "Panel",
+        "spec": {
+          "id": 9,
+          "title": "Pump event log",
+          "description": "All returned marker events, including their original JSON payload for fields not separately charted.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  CAST(event_time AS TIMESTAMP) AS time,\n  payload ->> 'type' AS event_type,\n  payload ->> 'displayTime' AS display_time,\n  CAST(payload AS VARCHAR) AS payload_json\nFROM carelink_history\nWHERE record_type = 'markers'\n  AND $__timeFilter(CAST(event_time AS TIMESTAMP))\nORDER BY time DESC\nLIMIT 500"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "alerts": {
+        "kind": "Panel",
+        "spec": {
+          "id": 10,
+          "title": "Cleared notifications and last alarm",
+          "description": "Notifications and alarm records returned by CareLink; this is a history display, not an alerting system.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  CAST(event_time AS TIMESTAMP) AS time,\n  record_type,\n  payload ->> 'type' AS type,\n  payload ->> 'faultId' AS fault_id,\n  payload ->> 'triggeredDateTime' AS triggered_at,\n  CAST(payload AS VARCHAR) AS payload_json\nFROM carelink_history\nWHERE record_type IN ('notification_clearedNotifications', 'lastAlarm')\n  AND $__timeFilter(CAST(event_time AS TIMESTAMP))\nORDER BY time DESC"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "limits": {
+        "kind": "Panel",
+        "spec": {
+          "id": 11,
+          "title": "Reported limits",
+          "description": "Limit records returned by CareLink, shown without assuming their clinical meaning or units.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  CAST(event_time AS TIMESTAMP) AS time,\n  TRY_CAST((payload ->> 'lowLimit') AS DOUBLE) AS low_limit,\n  TRY_CAST((payload ->> 'highLimit') AS DOUBLE) AS high_limit,\n  CAST(payload AS VARCHAR) AS payload_json\nFROM carelink_history\nWHERE record_type = 'limits'\n  AND $__timeFilter(CAST(event_time AS TIMESTAMP))\nORDER BY time DESC"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "raw-snapshots": {
+        "kind": "Panel",
+        "spec": {
+          "id": 12,
+          "title": "Complete CareLink API snapshots",
+          "description": "Raw complete responses. This panel preserves access to all API fields that are not yet promoted into a dedicated visualization.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT\n  fetched_at,\n  source_updated_at_ms,\n  device_id,\n  CAST(payload AS VARCHAR) AS payload_json\nFROM carelink_snapshots\nORDER BY fetched_at DESC\nLIMIT 100"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "range-distribution": {
+        "kind": "Panel",
+        "spec": {
+          "id": 13,
+          "title": "CGM range distribution",
+          "description": "Percentage of valid readings in standard retrospective CGM bands: <3.0, 3.0\u20133.8, 3.9\u201310.0, 10.1\u201313.9 and >=13.9 mmol/L.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH x AS (\n SELECT TRY_CAST((payload->>'sg') AS DOUBLE) sg FROM carelink_history\n WHERE record_type='sgs' AND TRY_CAST((payload->>'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP))), bands AS (\n SELECT CASE WHEN sg<54 THEN '1 Very low (<3.0)' WHEN sg<70 THEN '2 Low (3.0\u20133.8)'\n WHEN sg<=180 THEN '3 In range (3.9\u201310.0)' WHEN sg<250 THEN '4 High (10.1\u201313.8)'\n ELSE '5 Very high (>=13.9)' END band FROM x)\nSELECT band, ROUND(100.0*COUNT(*)/SUM(COUNT(*)) OVER (),1) AS percent, COUNT(*) readings\nFROM bands GROUP BY band ORDER BY band"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "barchart",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "decimals": 1
+                },
+                "overrides": []
+              },
+              "options": {
+                "orientation": "horizontal",
+                "xField": "band",
+                "showValue": "always",
+                "stacking": "none",
+                "groupWidth": 0.7,
+                "barWidth": 0.9
+              }
+            }
+          }
+        }
+      },
+      "cgm-kpis": {
+        "kind": "Panel",
+        "spec": {
+          "id": 14,
+          "title": "CGM retrospective metrics",
+          "description": "Standard descriptive CGM calculations over the selected period. GMI requires enough representative data (typically 14 days); with this API\u2019s ~24-hour window it is only a short-window estimate.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH x AS (\n SELECT TRY_CAST((payload->>'sg') AS DOUBLE) sg FROM carelink_history\n WHERE record_type='sgs' AND TRY_CAST((payload->>'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)))\nSELECT ROUND(AVG(sg)/18.0182,2) AS \"Mean mmol/L\",\n ROUND(100*STDDEV_SAMP(sg)/NULLIF(AVG(sg),0),1) AS \"CV (%)\",\n ROUND(3.31+0.02392*AVG(sg),2) AS \"GMI estimate (%)\",\n ROUND(100*COUNT(*) FILTER (WHERE sg BETWEEN 70 AND 180)/COUNT(*),1) AS \"TIR 3.9\u201310 (%)\",\n ROUND(100*COUNT(*) FILTER (WHERE sg<70)/COUNT(*),1) AS \"Below 3.9 (%)\",\n ROUND(100*COUNT(*) FILTER (WHERE sg>180)/COUNT(*),1) AS \"Above 10 (%)\",\n COUNT(*) AS readings FROM x"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "daily-cgm": {
+        "kind": "Panel",
+        "spec": {
+          "id": 15,
+          "title": "Daily CGM summary",
+          "description": "Daily valid reading count, mean, variability, range percentages and observed span.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH x AS (\n SELECT CAST(event_time AS TIMESTAMP) t,TRY_CAST((payload->>'sg') AS DOUBLE) sg\n FROM carelink_history WHERE record_type='sgs' AND TRY_CAST((payload->>'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)))\nSELECT CAST(t AS DATE) AS day,COUNT(*) readings,ROUND(AVG(sg)/18.0182,2) \"Mean mmol/L\",\n ROUND(100*STDDEV_SAMP(sg)/NULLIF(AVG(sg),0),1) \"CV (%)\",\n ROUND(100*COUNT(*) FILTER(WHERE sg<70)/COUNT(*),1) \"Below range (%)\",\n ROUND(100*COUNT(*) FILTER(WHERE sg BETWEEN 70 AND 180)/COUNT(*),1) \"In range (%)\",\n ROUND(100*COUNT(*) FILTER(WHERE sg>180)/COUNT(*),1) \"Above range (%)\",\n ROUND(date_diff('minute',MIN(t),MAX(t))/60.0,1) \"Observed hours\" FROM x GROUP BY 1 ORDER BY 1 DESC"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "therapy-totals": {
+        "kind": "Panel",
+        "spec": {
+          "id": 16,
+          "title": "Insulin and carbohydrate totals",
+          "description": "Totals from de-duplicated CareLink markers in the selected range. Auto-basal micro-deliveries and bolus events are separate.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH m AS (\n SELECT payload,CAST(event_time AS TIMESTAMP) t FROM carelink_history\n WHERE record_type='markers' AND $__timeFilter(CAST(event_time AS TIMESTAMP)))\nSELECT\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'bolusAmount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='AUTO_BASAL_DELIVERY'),2) AS \"Auto basal (U)\",\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='INSULIN'),2) AS \"Bolus insulin (U)\",\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='INSULIN' AND (payload->'data'->'dataValues'->>'activationType')='AUTOCORRECTION'),2) AS \"Autocorrection (U)\",\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'amount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='MEAL'),1) AS \"Carbohydrate (g)\",\n COUNT(*) FILTER(WHERE (payload->>'type')='MEAL') AS meals FROM m"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "bolus-events": {
+        "kind": "Panel",
+        "spec": {
+          "id": 17,
+          "title": "Bolus delivery by activation type",
+          "description": "Completed fast insulin markers split into CareLink activation types.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT CAST(event_time AS TIMESTAMP) AS time,\n CASE WHEN (payload->'data'->'dataValues'->>'activationType')='AUTOCORRECTION'\n THEN TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE) END AS autocorrection,\n CASE WHEN (payload->'data'->'dataValues'->>'activationType')<>'AUTOCORRECTION'\n THEN TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE) END AS recommended_or_other\nFROM carelink_history WHERE record_type='markers' AND (payload->>'type')='INSULIN'\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)) ORDER BY time"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "insulinUnits",
+                  "custom": {
+                    "drawStyle": "bars",
+                    "fillOpacity": 75,
+                    "lineWidth": 1
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "sum",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              }
+            }
+          }
+        }
+      },
+      "meal-events": {
+        "kind": "Panel",
+        "spec": {
+          "id": 18,
+          "title": "Carbohydrate entries",
+          "description": "Meal carbohydrate entries reported by CareLink.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT CAST(event_time AS TIMESTAMP) AS time,\n TRY_CAST((payload->'data'->'dataValues'->>'amount') AS DOUBLE) AS carbohydrates\nFROM carelink_history WHERE record_type='markers' AND (payload->>'type')='MEAL'\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)) ORDER BY time"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "gram",
+                  "custom": {
+                    "drawStyle": "bars",
+                    "fillOpacity": 75,
+                    "lineWidth": 1
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "sum",
+                    "mean",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "single",
+                  "sort": "none"
+                }
+              }
+            }
+          }
+        }
+      },
+      "daily-therapy": {
+        "kind": "Panel",
+        "spec": {
+          "id": 19,
+          "title": "Daily therapy summary",
+          "description": "Daily basal micro-delivery, bolus, autocorrection, carbohydrate and event counts from available markers.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH m AS (SELECT CAST(event_time AS TIMESTAMP) t,payload FROM carelink_history\n WHERE record_type='markers' AND $__timeFilter(CAST(event_time AS TIMESTAMP)))\nSELECT CAST(t AS DATE) AS day,\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'bolusAmount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='AUTO_BASAL_DELIVERY'),2) \"Auto basal U\",\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='INSULIN'),2) \"Bolus U\",\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='INSULIN' AND (payload->'data'->'dataValues'->>'activationType')='AUTOCORRECTION'),2) \"Autocorrection U\",\n ROUND(SUM(TRY_CAST((payload->'data'->'dataValues'->>'amount') AS DOUBLE)) FILTER(WHERE (payload->>'type')='MEAL'),1) \"Carbs g\",\n COUNT(*) FILTER(WHERE (payload->>'type')='INSULIN') boluses,COUNT(*) FILTER(WHERE (payload->>'type')='MEAL') meals\nFROM m GROUP BY 1 ORDER BY 1 DESC"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "device-telemetry": {
+        "kind": "Panel",
+        "spec": {
+          "id": 20,
+          "title": "Pump, transmitter and reservoir telemetry",
+          "description": "Snapshot trends accumulated while persistence is running; unlike CGM history, these values only exist from the first saved snapshot onward.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT fetched_at AS time,\n TRY_CAST((payload->'patientData'->>'pumpBatteryLevelPercent') AS DOUBLE) AS \"Pump battery %\",\n TRY_CAST((payload->'patientData'->>'gstBatteryLevel') AS DOUBLE) AS \"Transmitter battery %\",\n TRY_CAST((payload->'patientData'->>'reservoirRemainingUnits') AS DOUBLE) AS \"Reservoir U\",\n TRY_CAST((payload->'patientData'->>'sensorDurationHours') AS DOUBLE) AS \"Sensor age h\"\nFROM carelink_snapshots WHERE $__timeFilter(fetched_at) ORDER BY time"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "drawStyle": "line",
+                    "lineWidth": 2,
+                    "fillOpacity": 5
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "calcs": [
+                    "lastNotNull",
+                    "min",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              }
+            }
+          }
+        }
+      },
+      "system-health": {
+        "kind": "Panel",
+        "spec": {
+          "id": 21,
+          "title": "Latest system health",
+          "description": "Connectivity, sensor, pump, calibration and algorithm state from the latest complete response.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT fetched_at \"Fetched\",\n payload->'patientData'->>'systemStatusMessage' \"System\",\n payload->'patientData'->>'sensorState' \"Sensor\",\n payload->'patientData'->>'pumpCommunicationState' \"Pump communicating\",\n payload->'patientData'->>'gstCommunicationState' \"Transmitter communicating\",\n payload->'patientData'->>'conduitMedicalDeviceInRange' \"Pump in range\",\n payload->'patientData'->>'conduitSensorInRange' \"Sensor in range\",\n payload->'patientData'->>'calibStatus' \"Calibration\",\n payload->'patientData'->'therapyAlgorithmState'->>'autoModeReadinessState' \"Auto-mode readiness\",\n payload->'patientData'->'therapyAlgorithmState'->>'plgmLgsState' \"Low-glucose suspend\"\nFROM carelink_snapshots ORDER BY fetched_at DESC LIMIT 1"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "data-quality": {
+        "kind": "Panel",
+        "spec": {
+          "id": 22,
+          "title": "Data availability and freshness",
+          "description": "Observed CGM coverage. Expected readings assumes a nominal five-minute cadence. Snapshot freshness compares CareLink source update time with collection time.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "WITH x AS (SELECT CAST(event_time AS TIMESTAMP) t FROM carelink_history\n WHERE record_type='sgs' AND TRY_CAST((payload->>'sg') AS DOUBLE)>0\n AND $__timeFilter(CAST(event_time AS TIMESTAMP))), s AS (\n SELECT fetched_at,source_updated_at_ms FROM carelink_snapshots ORDER BY fetched_at DESC LIMIT 1)\nSELECT MIN(t) \"First SG\",MAX(t) \"Last SG\",COUNT(*) \"Valid readings\",\n ROUND(date_diff('minute',MIN(t),MAX(t))/5.0+1,0) \"Expected at 5 min\",\n ROUND(100*COUNT(*)/NULLIF(date_diff('minute',MIN(t),MAX(t))/5.0+1,0),1) \"Coverage (%)\",\n ROUND(date_diff('second',MAX(t),CURRENT_TIMESTAMP)/60.0,1) \"Latest SG age (min)\",\n (SELECT ROUND((epoch(fetched_at)-source_updated_at_ms/1000.0)/60.0,1) FROM s) \"Collection lag (min)\" FROM x"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      },
+      "insulin-detail": {
+        "kind": "Panel",
+        "spec": {
+          "id": 23,
+          "title": "Insulin and meal event detail",
+          "description": "Detailed therapy event fields extracted from the original marker JSON.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "refId": "A",
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfy2btihzxukga"
+                      },
+                      "group": "motherduck-duckdb-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "dataset": "default",
+                        "editorMode": "code",
+                        "format": 1,
+                        "rawSql": "SELECT CAST(event_time AS TIMESTAMP) AS time,payload->>'type' AS event,\n payload->'data'->'dataValues'->>'activationType' activation,\n TRY_CAST((payload->'data'->'dataValues'->>'deliveredFastAmount') AS DOUBLE) \"Insulin U\",\n TRY_CAST((payload->'data'->'dataValues'->>'amount') AS DOUBLE) \"Carbs g\",\n payload->'data'->'dataValues'->>'completed' completed,CAST(payload AS VARCHAR) AS payload_json\nFROM carelink_history WHERE record_type='markers' AND (payload->>'type') IN ('INSULIN','MEAL')\n AND $__timeFilter(CAST(event_time AS TIMESTAMP)) ORDER BY time DESC LIMIT 500"
+                      },
+                      "version": "v0"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.2.1",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "showHeader": true,
+                "cellHeight": "sm"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "GridLayout",
+      "spec": {
+        "items": [
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "current-glucose"
+              },
+              "x": 0,
+              "y": 0,
+              "width": 5,
+              "height": 5
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "current-pump-status"
+              },
+              "x": 5,
+              "y": 0,
+              "width": 19,
+              "height": 5
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "glucose-trend"
+              },
+              "x": 0,
+              "y": 5,
+              "width": 24,
+              "height": 9
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "range-distribution"
+              },
+              "x": 0,
+              "y": 14,
+              "width": 12,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "cgm-kpis"
+              },
+              "x": 12,
+              "y": 14,
+              "width": 12,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "glucose-summary"
+              },
+              "x": 0,
+              "y": 22,
+              "width": 9,
+              "height": 5
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "hourly-glucose"
+              },
+              "x": 9,
+              "y": 22,
+              "width": 15,
+              "height": 7
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "daily-cgm"
+              },
+              "x": 0,
+              "y": 29,
+              "width": 24,
+              "height": 7
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "therapy-totals"
+              },
+              "x": 0,
+              "y": 36,
+              "width": 24,
+              "height": 5
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "auto-basal"
+              },
+              "x": 0,
+              "y": 41,
+              "width": 8,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "bolus-events"
+              },
+              "x": 8,
+              "y": 41,
+              "width": 8,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "meal-events"
+              },
+              "x": 16,
+              "y": 41,
+              "width": 8,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "active-insulin"
+              },
+              "x": 0,
+              "y": 49,
+              "width": 12,
+              "height": 7
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "daily-therapy"
+              },
+              "x": 12,
+              "y": 49,
+              "width": 12,
+              "height": 7
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "insulin-detail"
+              },
+              "x": 0,
+              "y": 56,
+              "width": 24,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "device-telemetry"
+              },
+              "x": 0,
+              "y": 64,
+              "width": 15,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "system-health"
+              },
+              "x": 15,
+              "y": 64,
+              "width": 9,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "data-quality"
+              },
+              "x": 0,
+              "y": 72,
+              "width": 24,
+              "height": 6
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "marker-counts"
+              },
+              "x": 0,
+              "y": 78,
+              "width": 8,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "alerts"
+              },
+              "x": 8,
+              "y": 78,
+              "width": 16,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "markers-table"
+              },
+              "x": 0,
+              "y": 86,
+              "width": 24,
+              "height": 8
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "limits"
+              },
+              "x": 0,
+              "y": 94,
+              "width": 24,
+              "height": 6
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "element": {
+                "kind": "ElementReference",
+                "name": "raw-snapshots"
+              },
+              "x": 0,
+              "y": 100,
+              "width": 24,
+              "height": 9
+            }
+          }
+        ]
+      }
+    },
+    "links": [],
+    "preferences": {
+      "layout": {
+        "kind": "GridLayout",
+        "spec": {
+          "items": []
+        }
+      }
+    },
+    "preload": false,
+    "variables": []
+  }
+}

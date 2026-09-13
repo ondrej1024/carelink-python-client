@@ -131,6 +131,8 @@ python3 carelink_client2_proxy.py
 
 Every successful proxy download is also persisted to DuckDB. DuckDB is used so readings remain available beyond CareLink's normally 24-hour history window while keeping deployment simple: it is an embedded, file-based database with no database server to configure. By default the database is `carelink.duckdb` beside the token file; set another location with `--database /path/to/carelink.duckdb`. `carelink_snapshots` contains each complete API response, while `carelink_history` contains de-duplicated sensor readings, markers, limits, notifications, and current-state records from the available history window.
 
+To serve the database to Grafana, use `--replica-database /path/to/grafana-copy.duckdb`. DuckDB permits only one process to write a database file, so Grafana must read this replica, never the proxy's primary database. The replica is a stable, read-only DuckDB catalog whose `carelink_snapshots` and `carelink_history` views read an atomically published `.parquet` file. Keeping the catalog inode stable allows Grafana's persistent DuckDB connection to see every update.
+
 The proxy provides the following API endpoints which can be queried with an HTTP `GET` request:
 
 * `<proxy IP address>:8081` (Status info)

@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging as log
 import os
+import tempfile
 from datetime import datetime, timezone
 
 import duckdb
@@ -134,3 +135,149 @@ class CareLinkStorage:
                 """, history)
         log.info("Saved CareLink response to %s (%d history records)",
                  self.database_file, len(history))
+
+    @staticmethod
+    def _sql_string(value):
+        """Quote a string for SQL statements which cannot use parameters."""
+        return "'" + value.replace("'", "''") + "'"
+
+    @staticmethod
+    def _apply_file_metadata(filename, existing):
+        if existing is not None:
+            os.chmod(filename, existing.st_mode & 0o777)
+            os.chown(filename, existing.st_uid, existing.st_gid)
+
+    def _create_replica_catalog(self, filename, data_file):
+        """Create the stable DuckDB catalog whose views read live Parquet data."""
+        quoted_data_file = self._sql_string(data_file)
+        with duckdb.connect(filename) as con:
+            con.execute("""
+                CREATE TABLE carelink_replica_metadata (
+                    format_version INTEGER NOT NULL,
+                    data_file VARCHAR NOT NULL
+                )
+            """)
+            con.execute(
+                "INSERT INTO carelink_replica_metadata VALUES (1, ?)",
+                [data_file],
+            )
+            con.execute("""
+                CREATE VIEW carelink_snapshots AS
+                SELECT device_id, source_updated_at_ms, fetched_at,
+                       payload::JSON AS payload
+                FROM read_parquet(%s)
+                WHERE dataset = 'snapshots'
+            """ % quoted_data_file)
+            con.execute("""
+                CREATE VIEW carelink_history AS
+                SELECT device_id, record_type, event_time, record_hash,
+                       first_seen_at, last_seen_at, payload::JSON AS payload
+                FROM read_parquet(%s)
+                WHERE dataset = 'history'
+            """ % quoted_data_file)
+
+    def publish_replica(self, replica_file):
+        """Publish data for Grafana without replacing its open DuckDB catalog.
+
+        Grafana keeps its DuckDB connection open, so replacing the database file
+        leaves it reading the old inode forever. The database at ``replica_file``
+        is therefore a stable catalog containing views. Each publication instead
+        atomically replaces one Parquet file, which DuckDB opens for every query.
+        """
+        replica_file = os.path.abspath(replica_file)
+        replica_dir = os.path.dirname(replica_file)
+        if not os.path.isdir(replica_dir):
+            raise ValueError("replica directory does not exist: %s" % replica_dir)
+        data_file = replica_file + ".parquet"
+
+        try:
+            catalog_metadata = os.stat(replica_file)
+        except FileNotFoundError:
+            catalog_metadata = None
+        try:
+            data_metadata = os.stat(data_file)
+        except FileNotFoundError:
+            data_metadata = catalog_metadata
+
+        # Export both logical tables into one file so every Grafana query sees a
+        # self-consistent generation. COPY requires a path rather than a bound
+        # parameter, hence the narrowly scoped SQL string quoting helper.
+        fd, temporary_data = tempfile.mkstemp(
+            prefix=".%s." % os.path.basename(data_file),
+            suffix=".tmp",
+            dir=replica_dir,
+        )
+        os.close(fd)
+        os.unlink(temporary_data)
+        try:
+            with duckdb.connect(self.database_file, read_only=True) as con:
+                con.execute("""
+                    COPY (
+                        SELECT 'snapshots' AS dataset, device_id,
+                               source_updated_at_ms, fetched_at,
+                               NULL::VARCHAR AS record_type,
+                               NULL::VARCHAR AS event_time,
+                               NULL::VARCHAR AS record_hash,
+                               NULL::TIMESTAMPTZ AS first_seen_at,
+                               NULL::TIMESTAMPTZ AS last_seen_at,
+                               payload::VARCHAR AS payload
+                        FROM carelink_snapshots
+                        UNION ALL
+                        SELECT 'history', device_id, NULL::BIGINT,
+                               NULL::TIMESTAMPTZ, record_type, event_time,
+                               record_hash, first_seen_at, last_seen_at,
+                               payload::VARCHAR
+                        FROM carelink_history
+                    ) TO %s (FORMAT PARQUET, COMPRESSION ZSTD)
+                """ % self._sql_string(temporary_data))
+            with open(temporary_data, "rb") as published:
+                os.fsync(published.fileno())
+            self._apply_file_metadata(temporary_data, data_metadata)
+            os.replace(temporary_data, data_file)
+        except Exception:
+            try:
+                os.unlink(temporary_data)
+            except FileNotFoundError:
+                pass
+            raise
+
+        # Migrate the former full-copy replica once. Thereafter this catalog is
+        # deliberately never replaced, so Grafana's long-lived handle stays valid.
+        catalog_is_current = False
+        if catalog_metadata is not None:
+            try:
+                with duckdb.connect(replica_file, read_only=True) as con:
+                    row = con.execute("""
+                        SELECT format_version, data_file
+                        FROM carelink_replica_metadata
+                    """).fetchone()
+                    catalog_is_current = row == (1, data_file)
+            except duckdb.Error:
+                pass
+
+        if not catalog_is_current:
+            fd, temporary_catalog = tempfile.mkstemp(
+                prefix=".%s." % os.path.basename(replica_file),
+                suffix=".tmp",
+                dir=replica_dir,
+            )
+            os.close(fd)
+            os.unlink(temporary_catalog)
+            try:
+                self._create_replica_catalog(temporary_catalog, data_file)
+                with open(temporary_catalog, "rb") as published:
+                    os.fsync(published.fileno())
+                self._apply_file_metadata(temporary_catalog, catalog_metadata)
+                os.replace(temporary_catalog, replica_file)
+                log.warning(
+                    "Migrated Grafana replica catalog; restart Grafana once to "
+                    "release the former database file"
+                )
+            except Exception:
+                try:
+                    os.unlink(temporary_catalog)
+                except FileNotFoundError:
+                    pass
+                raise
+
+        log.info("Published Grafana replica data to %s", data_file)

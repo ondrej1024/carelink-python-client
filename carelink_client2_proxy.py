@@ -262,6 +262,7 @@ def start_webserver():
 parser = argparse.ArgumentParser()
 parser.add_argument('--tokenfile','-t', type=str, help='File containing auth tokens (default: %s)' % TOKENFILE, required=False)
 parser.add_argument('--database', '-b', type=str, help='DuckDB file (default: carelink.duckdb beside the token file)', required=False)
+parser.add_argument('--replica-database', type=str, help='Read-only DuckDB replica to atomically publish for Grafana', required=False)
 parser.add_argument('--wait',     '-w', type=int, help='Wait seconds between repeated calls (default 300)', required=False)
 parser.add_argument('--verbose',  '-v', help='Verbose mode', action='store_true')
 args = parser.parse_args()
@@ -270,6 +271,7 @@ args = parser.parse_args()
 tokenfile = TOKENFILE if args.tokenfile == None else args.tokenfile
 database  = (os.path.join(os.path.dirname(os.path.abspath(tokenfile)), "carelink.duckdb")
              if args.database == None else args.database)
+replica_database = args.replica_database
 wait      = UPDATE_INTERVAL if args.wait == None else args.wait
 verbose   = args.verbose
 storage   = CareLinkStorage(database)
@@ -312,6 +314,8 @@ while True:
                # replacing the response exposed by the local HTTP endpoint.
                try:
                   storage.save(downloadedData)
+                  if replica_database is not None:
+                     storage.publish_replica(replica_database)
                except Exception as e:
                   # Keep polling and serving the latest API response if storage
                   # is temporarily unavailable; the next poll retries the save.
