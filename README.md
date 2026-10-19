@@ -129,7 +129,11 @@ Use the `-h` option for more info. Basic usage:
 python3 carelink_client2_proxy.py
 ```
 
-Every successful proxy download is also persisted to DuckDB. DuckDB is used so readings remain available beyond CareLink's normally 24-hour history window while keeping deployment simple: it is an embedded, file-based database with no database server to configure. By default the database is `carelink.duckdb` beside the token file; set another location with `--database /path/to/carelink.duckdb`. `carelink_snapshots` contains each complete API response, while `carelink_history` contains de-duplicated sensor readings, markers, limits, notifications, and current-state records from the available history window.
+Persistent data storage is **opt-in** and disabled by default. Enable it by starting the proxy with `--storage` (or `-s`), which persists every successful download to DuckDB. DuckDB is used so readings remain available beyond CareLink's normally 24-hour history window while keeping deployment simple: it is an embedded, file-based database with no database server to configure. By default the database is `carelink.duckdb` beside the token file; set another location with `--database /path/to/carelink.duckdb` (passing `--database` also enables storage). `carelink_snapshots` contains each complete API response, while `carelink_history` contains de-duplicated sensor readings, markers, limits, notifications, and current-state records from the available history window.
+
+```
+python3 carelink_client2_proxy.py --storage
+```
 
 The proxy provides the following API endpoints which can be queried with an HTTP `GET` request:
 
