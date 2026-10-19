@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 
 logindata.json
+carelink.duckdb
+carelink.duckdb.wal

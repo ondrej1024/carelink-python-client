@@ -80,6 +80,8 @@ cd carelink-python-client
 pip3 install -r requirements.txt
 ```
 
+This installs DuckDB, the embedded database used by the proxy for persistent local storage. DuckDB runs in-process and stores data in a single file, so no separate database server or service needs to be installed.
+
 ### Get login data
 
 The Carelink Client library needs the initial login data stored in the `logindata.json` file. This file is created by running the login script on a PC with a screen.
@@ -125,6 +127,12 @@ Use the `-h` option for more info. Basic usage:
 
 ```
 python3 carelink_client2_proxy.py
+```
+
+Persistent data storage is **opt-in** and disabled by default. Enable it by starting the proxy with `--storage` (or `-s`), which persists every successful download to DuckDB. DuckDB is used so readings remain available beyond CareLink's normally 24-hour history window while keeping deployment simple: it is an embedded, file-based database with no database server to configure. By default the database is `carelink.duckdb` beside the token file; set another location with `--database /path/to/carelink.duckdb` (passing `--database` also enables storage). `carelink_snapshots` contains each complete API response, while `carelink_history` contains de-duplicated sensor readings, markers, limits, notifications, and current-state records from the available history window.
+
+```
+python3 carelink_client2_proxy.py --storage
 ```
 
 The proxy provides the following API endpoints which can be queried with an HTTP `GET` request:
