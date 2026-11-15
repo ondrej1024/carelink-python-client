@@ -66,6 +66,13 @@ RETRY_INTERVAL  = 120
 # Token handling
 TOKENFILE = "logindata.json"
 wait_for_params = True
+# A failed start is retried with the stored token. When CareLink could not be
+# reached at all (no network, DNS, a 5xx) every INIT_RETRY_FIRST_S: that costs
+# CareLink nothing and brings the data back within a minute of the network.
+# When CareLink answered and refused, doubling up to INIT_RETRY_MAX_S, so a
+# token that really is dead costs one request per half hour.
+INIT_RETRY_FIRST_S = 60
+INIT_RETRY_MAX_S   = 1800
 
 # Status messages
 STATUS_INIT     = "Initialization"
@@ -283,6 +290,7 @@ signal.signal(signal.SIGINT, on_sigterm)
 start_webserver()
 
 # Main process loop
+init_retry_s = INIT_RETRY_FIRST_S
 while True:
    # Init Carelink client
    client = carelink_client2.CareLinkClient(tokenFile=tokenfile)
@@ -291,6 +299,7 @@ while True:
    # Login to Carelink server
    if client.init():
       g_status = STATUS_LOGIN_OK
+      init_retry_s = INIT_RETRY_FIRST_S
 
       # Infinite loop requesting Carelink data periodically
       i = 0
@@ -332,12 +341,28 @@ while True:
          log.debug("Waiting " + str(tmoSeconds) + " seconds before next download")
          time.sleep(tmoSeconds+10)
 
-   # Wait for new token
-   # FIXME
-   log.info(STATUS_NEED_TKN)
-   g_status = STATUS_NEED_TKN
+   # A failed start is not always a bad token. After a power cut the Pi is
+   # often back before the router, init() cannot even resolve the CareLink
+   # host, and waiting here forever left a working token unused until someone
+   # restarted the service by hand (seen: 14 hours stuck on a token that
+   # refreshed fine the moment the proxy was restarted). So retry the stored
+   # token: quickly while CareLink cannot be reached, backing off when it
+   # refuses.
+   recentData = None
+   if client.initFailedTransient():
+      retry_s = INIT_RETRY_FIRST_S
+      log.info("CareLink not reachable; retrying in %d s" % retry_s)
+   else:
+      log.info(STATUS_NEED_TKN)
+      g_status = STATUS_NEED_TKN
+      retry_s = init_retry_s
+      init_retry_s = min(init_retry_s * 2, INIT_RETRY_MAX_S)
+      log.info("Retrying with the stored token in %d s" % retry_s)
+   # Monotonic: a Pi without an RTC jumps its wall clock when NTP arrives,
+   # which would end this wait early or late.
+   retry_at = time.monotonic() + retry_s
    wait_for_params = True
-   while wait_for_params:
+   while wait_for_params and time.monotonic() < retry_at:
       time.sleep(0.1)
 
 # Exit         
