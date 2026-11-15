@@ -185,10 +185,12 @@ class MyServer(BaseHTTPRequestHandler):
          content_type = "text/html"
          #print("page not found")
       
-      # Send response
+      # Send response. Deliberately no Access-Control-Allow-Origin: with "*",
+      # any web page open in any browser on the same network could read the
+      # full patient record cross-origin. The clients of this proxy (displays,
+      # scripts) are not browsers, and CORS does not apply to them at all.
       self.send_response(status_code)
       self.send_header("Content-type", content_type)
-      self.send_header("Access-Control-Allow-Origin", "*")
       self.end_headers()
       try:
          self.wfile.write(bytes(response, "utf-8"))
@@ -227,7 +229,6 @@ class MyServer(BaseHTTPRequestHandler):
       # Send response
       self.send_response(status_code)
       self.send_header("Content-type", content_type)
-      self.send_header("Access-Control-Allow-Origin", "*")
       self.end_headers()
       try:
          self.wfile.write(bytes(response, "utf-8"))
