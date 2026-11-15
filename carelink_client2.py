@@ -67,6 +67,22 @@ COMMON_HEADERS = {
                   "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Nexus 5X Build/QQ3A.200805.001)",
                  }
 
+# Answers from the token endpoint that mean "this refresh token is dead",
+# as opposed to a server or network hiccup worth retrying.
+REFRESH_REFUSED_CODES = [400,401,403]
+
+
+class TokenRefreshRefused(Exception):
+   """CareLink refused the refresh token: only a new login helps.
+
+   Seen when the same account was logged in on another machine: the new
+   login ends every older session, and the old one learns it only at its
+   next refresh, up to three hours later.
+   """
+   def __init__(self, status_code):
+      Exception.__init__(self, "ERROR: failed to refresh token (CareLink refused it, HTTP %d)" % status_code)
+      self.status_code = status_code
+
 # Logging config
 FORMAT = "[%(asctime)s:%(levelname)s] %(message)s"
 log.basicConfig(format=FORMAT, datefmt="%Y-%m-%d %H:%M:%S", level=log.INFO)
@@ -97,6 +113,9 @@ class CareLinkClient(object):
       
       # API status
       self.__last_api_status = None
+      # Why the last init() failed: True when CareLink could not be reached
+      # (no network, DNS, a 5xx), False when it answered and said no.
+      self.__init_failed_transient = False
       
    ###########################################################
    # Class internal functions
@@ -262,8 +281,10 @@ class CareLinkClient(object):
          headers["mag-identifier"] = token_data["mag-identifier"]
       resp = requests.post(url=token_url, headers=headers, data=data)
       log.debug("   status: %d" % resp.status_code)
+      if resp.status_code in REFRESH_REFUSED_CODES:
+         raise TokenRefreshRefused(resp.status_code)
       if resp.status_code != 200:
-         raise Exception("ERROR: failed to refresh token")
+         raise Exception("ERROR: failed to refresh token (HTTP %d)" % resp.status_code)
       new_data = resp.json()
       token_data["access_token"] = new_data["access_token"]
       token_data["refresh_token"] = new_data["refresh_token"]
@@ -325,6 +346,7 @@ class CareLinkClient(object):
    # Init static data
    ###########################################################
    def _init(self):
+      self.__init_failed_transient = False
       self.__tokenData = self._read_token_file(self.__tokenFile)
       if self.__tokenData is None:
          return False
@@ -340,6 +362,9 @@ class CareLinkClient(object):
             self.__patient = self._get_patient(self.__config, self.__tokenData)
       except Exception as e:
          log.error(e)
+         self.__init_failed_transient = (
+            isinstance(e, requests.exceptions.RequestException)
+            or (self.__last_api_status is not None and self.__last_api_status >= 500))
          if self.__last_api_status in AUTH_ERROR_CODES:
             try:
                self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
@@ -428,6 +453,12 @@ class CareLinkClient(object):
    ###########################################################
    def getLastResponseCode(self):
       return self.__last_api_status
+
+   ###########################################################
+   # Did the last init() fail on the network rather than the token?
+   ###########################################################
+   def initFailedTransient(self):
+      return self.__init_failed_transient
    
    ###########################################################
    # Get Client library version
