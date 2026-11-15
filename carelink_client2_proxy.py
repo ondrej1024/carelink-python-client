@@ -92,7 +92,10 @@ def on_sigterm(signum, frame):
 #################################################
 def get_essential_data(data):
    mydata = ""
-   if data != None:      
+   # CareLink answers a failed request with a body that has no patientData.
+   # Treat it as no data, like None: a KeyError here makes the request
+   # handler fail, and the client gets no answer at all.
+   if isinstance(data, dict) and isinstance(data.get("patientData"), dict):
       mydata = data["patientData"].copy()
       try:
          del mydata["sgs"]
@@ -325,6 +328,16 @@ while True:
             log.debug("Next reading at {0}, {1} seconds from now\n".format(nextReading,tmoSeconds))
             if tmoSeconds < 0:
                tmoSeconds = RETRY_INTERVAL
+            # Never further ahead than one cycle. nextReading is server time
+            # plus one interval, so anything longer means the local clock is
+            # wrong: a Raspberry Pi has no RTC and starts with the time it was
+            # switched off until NTP catches up. Seen after a night switched
+            # off: the proxy fetched seconds before the clock jumped 9 hours
+            # forward, then slept 9 hours on data it already had.
+            elif tmoSeconds > wait:
+               log.warning("Next reading %d s away exceeds the %d s interval; clock was off, using %d s"
+                           % (tmoSeconds, wait, wait))
+               tmoSeconds = wait
          except KeyError:
             tmoSeconds = RETRY_INTERVAL
             #print("Retry reading {0} seconds from now\n".format(tmoSeconds))
