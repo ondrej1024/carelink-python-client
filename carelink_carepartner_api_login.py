@@ -226,7 +226,8 @@ def do_login_non_auth0(endpoint_config):
 	reg_url = api_base_url + sso_config["mag"]["system_endpoints"]["device_register_endpoint_path"]
 	reg_req = requests.post(reg_url, headers=reg_headers, data=csr)
 	if reg_req.status_code != 200:
-		print(f"\n\n{curlify.to_curl(reg_req.request)}")
+		if is_debug:
+			print(f"\n\n{curlify.to_curl(reg_req.request)}")
 		raise Exception(f'Could not register: {json.loads(reg_req.text)["error_description"]}')
 
 	# TODO: step 5 token
@@ -240,7 +241,8 @@ def do_login_non_auth0(endpoint_config):
 	}
 	token_req = requests.post(token_req_url, headers={"mag-identifier" : reg_req.headers["mag-identifier"]}, data=token_req_data)
 	if token_req.status_code != 200:
-		print(f"\n\n{curlify.to_curl(token_req.request)}")
+		if is_debug:
+			print(f"\n\n{curlify.to_curl(token_req.request)}")
 		raise Exception("Could not get token data")
 	
 	token_data = json.loads(token_req.text)
@@ -281,14 +283,13 @@ def do_login_auth0(endpoint_config):
     }
     token_req = requests.post(token_req_url, data=token_req_data)
     if token_req.status_code != 200:
-        print(f"\n\n{curlify.to_curl(token_req.request)}")
-        print(token_req.text)
+        if is_debug:
+            print(f"\n\n{curlify.to_curl(token_req.request)}")
+            print(token_req.text)
         raise Exception("Could not get token data")
 
     token_data = json.loads(token_req.text)
     print(f"got token data from server")
-
-    print(token_data)
 
     token_data["client_id"] = token_req_data["client_id"]
     del token_data["expires_in"]
