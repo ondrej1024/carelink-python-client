@@ -97,6 +97,9 @@ class CareLinkClient(object):
       
       # API status
       self.__last_api_status = None
+      # Why the last init() failed: True when CareLink could not be reached
+      # (no network, DNS, a 5xx), False when it answered and said no.
+      self.__init_failed_transient = False
       
    ###########################################################
    # Class internal functions
@@ -325,6 +328,7 @@ class CareLinkClient(object):
    # Init static data
    ###########################################################
    def _init(self):
+      self.__init_failed_transient = False
       self.__tokenData = self._read_token_file(self.__tokenFile)
       if self.__tokenData is None:
          return False
@@ -340,6 +344,9 @@ class CareLinkClient(object):
             self.__patient = self._get_patient(self.__config, self.__tokenData)
       except Exception as e:
          log.error(e)
+         self.__init_failed_transient = (
+            isinstance(e, requests.exceptions.RequestException)
+            or (self.__last_api_status is not None and self.__last_api_status >= 500))
          if self.__last_api_status in AUTH_ERROR_CODES:
             try:
                self.__tokenData = self._do_refresh(self.__config, self.__tokenData)
@@ -428,6 +435,12 @@ class CareLinkClient(object):
    ###########################################################
    def getLastResponseCode(self):
       return self.__last_api_status
+
+   ###########################################################
+   # Did the last init() fail on the network rather than the token?
+   ###########################################################
+   def initFailedTransient(self):
+      return self.__init_failed_transient
    
    ###########################################################
    # Get Client library version
