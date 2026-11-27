@@ -18,6 +18,7 @@
 #    19/11/2024 - Update CARELINK_CONFIG_URL
 #    11/02/2025 - Update CARELINK_CONFIG_URL to ver 3.3
 #    03/01/2026 - Fix for new Auth method (by @m0rt4l1n)
+#    27/11/2026 - Merged various PRs (by @fredvangoolen)
 #
 #  Copyright 2023-2026, Ondrej Wisniewski
 #
@@ -55,7 +56,7 @@ from datetime import datetime, timedelta
 
  
 # Version string
-VERSION = "1.4"
+VERSION = "1.5"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"

@@ -29,6 +29,7 @@
 #    11/04/2024 - Handle reconnection in case of network error
 #    17/01/2025 - Adapt get_essential_data() to new data format
 #    04/07/2026 - Adapt time until next reading calculation to new data format
+#    27/11/2026 - Merged various PRs (by @fredvangoolen)
 #
 #  Copyright 2021-2026, Ondrej Wisniewski
 #
@@ -48,7 +49,7 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 
-VERSION = "1.3"
+VERSION = "1.4"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -82,9 +83,6 @@ STATUS_LOGIN_OK = "Login successful"
 STATUS_NEED_TKN = "Valid token required"
 STATUS_NO_DATA  = "Logged in, but no data from CareLink"
 g_status = STATUS_INIT
-# One line under the status: since when, and why. The status alone said
-# "Login successful" through hours of refused token refreshes, while the
-# clients got nothing.
 g_detail = ""
 g_last_data = None          # wall-clock time of the last good download
 
@@ -161,7 +159,6 @@ def webgui(status,action=None,country=""):
             <span style="font-family: Helvetica,Arial,sans-serif; color: white;"><a style="text-decoration:none; color: white;" href=https://github.com/ondrej1024/carelink-python-client>carelink_client2_proxy</a> | version %s | 2024</span></td></tr> \n \
             </tbody></table></body></html>' % VERSION
    
-   # Not called "html": that name is the module escaping g_detail above.
    page = head + body + tail
    return page
 
@@ -209,10 +206,6 @@ class MyServer(BaseHTTPRequestHandler):
          content_type = "text/html"
          #print("page not found")
       
-      # Send response. Deliberately no Access-Control-Allow-Origin: with "*",
-      # any web page open in any browser on the same network could read the
-      # full patient record cross-origin. The clients of this proxy (displays,
-      # scripts) are not browsers, and CORS does not apply to them at all.
       self.send_response(status_code)
       self.send_header("Content-type", content_type)
       self.end_headers()
